@@ -87,8 +87,8 @@ class ServiceContainer:
             QueryExpansionAgent,
         )
 
-        from research_discovery.services.embedding.service import (
-            EmbeddingService,
+        from research_discovery.providers.factory import (
+            ProviderFactory,
         )
 
         from research_discovery.services.ranking.engine import (
@@ -128,7 +128,7 @@ class ServiceContainer:
         )
 
         self.embedder = (
-            EmbeddingService()
+            ProviderFactory.create_embedding_provider()
         )
 
         self.ranker = (

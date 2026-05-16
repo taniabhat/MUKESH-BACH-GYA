@@ -25,8 +25,8 @@ from research_discovery.models.paper import (
 
 logger = get_logger(__name__)
 
-BASE_URL = settings.api.openalex_base_url
-EMAIL = settings.api.openalex_email
+BASE_URL = settings.openalex.base_url
+EMAIL = settings.openalex.email
 
 MAX_REFERENCES = 50
 MAX_FIELDS_OF_STUDY = 10

@@ -17,8 +17,8 @@ from research_discovery.models.paper import (
     PaperTier,
     RankingFeatures,
 )
-from research_discovery.services.embedding.service import (
-    EmbeddingService,
+from research_discovery.providers.factory import (
+    ProviderFactory,
 )
 
 logger = get_logger(__name__)
@@ -257,7 +257,7 @@ class RankingEngine:
         self.weights = weights
 
         self._embedder = (
-            EmbeddingService()
+            ProviderFactory.create_embedding_provider()
         )
 
     def rank(

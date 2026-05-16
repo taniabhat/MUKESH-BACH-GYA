@@ -25,7 +25,7 @@ from research_discovery.models.paper import (
 
 logger = get_logger(__name__)
 
-BASE_URL = settings.api.semantic_scholar_base_url
+BASE_URL = settings.semantic_scholar.base_url
 
 MAX_AUTHORS = 20
 MAX_REFERENCES = 50
@@ -63,7 +63,7 @@ class SemanticScholarAdapter:
     def __init__(self):
 
         self._semaphore = asyncio.Semaphore(
-            settings.api.semantic_scholar_rps
+            settings.semantic_scholar.rps_limit
         )
 
         self._bucket = TokenBucket(
@@ -72,7 +72,7 @@ class SemanticScholarAdapter:
         )
 
         api_key = (
-            settings.api.semantic_scholar_api_key
+            settings.semantic_scholar.api_key
         )
 
         self._headers = (

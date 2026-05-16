@@ -20,8 +20,8 @@ from research_discovery.models.paper import (
 from research_discovery.services.dedup.engine import (
     DeduplicationEngine,
 )
-from research_discovery.services.embedding.service import (
-    EmbeddingService,
+from research_discovery.providers.factory import (
+    ProviderFactory,
 )
 from research_discovery.services.ranking.engine import (
     RankingEngine,
@@ -218,7 +218,7 @@ class TestEmbeddingService(
     ):
 
         self.embedder = (
-            EmbeddingService()
+            ProviderFactory.create_embedding_provider()
         )
 
     def test_embed_query(
@@ -290,7 +290,7 @@ class TestRankingEngine(
         )
 
         self.embedder = (
-            EmbeddingService()
+            ProviderFactory.create_embedding_provider()
         )
 
     def test_rank_assigns_scores(

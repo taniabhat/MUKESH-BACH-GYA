@@ -16,26 +16,6 @@ load_dotenv()
 
 
 # ---------------------------------------------------------------------------
-# Provider Types
-# ---------------------------------------------------------------------------
-
-class LLMProvider(str, Enum):
-    OLLAMA = "ollama"
-    VLLM = "vllm"
-    OPENAI = "openai"
-    HUGGINGFACE = "huggingface"
-    TOGETHER = "together"
-    GROQ = "groq"
-    LMSTUDIO = "lmstudio"
-
-
-class EmbeddingProvider(str, Enum):
-    LOCAL = "local"
-    HUGGINGFACE = "huggingface"
-    OPENAI = "openai"
-
-
-# ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
 
@@ -60,53 +40,38 @@ class HTTPConfig:
 @dataclass
 class LLMConfig:
 
-    provider: LLMProvider = field(
-        default_factory=lambda: LLMProvider(
-            os.getenv(
-                "LLM_PROVIDER",
-                "ollama",
-            )
+    provider: str = field(
+        default_factory=lambda: os.getenv(
+            "LLM_PROVIDER",
+            "huggingface",
         )
     )
 
-    model_name: str = field(
+    model: str = field(
         default_factory=lambda: os.getenv(
             "LLM_MODEL",
-            "qwen3:14b",
+            "Qwen/Qwen3-32B",
         )
     )
 
-    api_key: Optional[str] = field(
+    api_key: str = field(
         default_factory=lambda: os.getenv(
             "LLM_API_KEY",
+            "",
         )
     )
 
-    base_url: str = field(
+    base_url: str | None = field(
         default_factory=lambda: os.getenv(
             "LLM_BASE_URL",
-            "http://localhost:11434",
-        )
+            "",
+        ) or None
     )
 
-    temperature: float = field(
-        default_factory=lambda: float(
-            os.getenv(
-                "LLM_TEMPERATURE",
-                "0.3",
-            )
-        )
-    )
+    temperature: float = 0.3
 
-    max_tokens: int = field(
-        default_factory=lambda: int(
-            os.getenv(
-                "LLM_MAX_TOKENS",
-                "1024",
-            )
-        )
-    )
-
+    max_tokens: int = 1024
+    
     request_timeout: int = field(
         default_factory=lambda: int(
             os.getenv(
@@ -124,67 +89,35 @@ class LLMConfig:
 @dataclass
 class EmbeddingConfig:
 
-    provider: EmbeddingProvider = field(
-        default_factory=lambda: EmbeddingProvider(
-            os.getenv(
-                "EMBEDDING_PROVIDER",
-                "local",
-            )
+    provider: str = field(
+        default_factory=lambda: os.getenv(
+            "EMBEDDING_PROVIDER",
+            "huggingface",
         )
     )
 
-    model_name: str = field(
+    model: str = field(
         default_factory=lambda: os.getenv(
             "EMBEDDING_MODEL",
             "BAAI/bge-m3",
         )
     )
 
-    api_key: Optional[str] = field(
+    api_key: str = field(
         default_factory=lambda: os.getenv(
             "EMBEDDING_API_KEY",
+            "",
         )
     )
 
-    base_url: Optional[str] = field(
+    base_url: str | None = field(
         default_factory=lambda: os.getenv(
             "EMBEDDING_BASE_URL",
-        )
+            "",
+        ) or None
     )
 
-    dimension: int = field(
-        default_factory=lambda: int(
-            os.getenv(
-                "EMBEDDING_DIMENSION",
-                "1024",
-            )
-        )
-    )
-
-    batch_size: int = field(
-        default_factory=lambda: int(
-            os.getenv(
-                "EMBEDDING_BATCH_SIZE",
-                "32",
-            )
-        )
-    )
-
-    device: str = field(
-        default_factory=lambda: os.getenv(
-            "EMBEDDING_DEVICE",
-            "cuda",
-        )
-    )
-
-    cache_dir: Path = field(
-        default_factory=lambda: Path(
-            os.getenv(
-                "MODEL_CACHE_DIR",
-                "/tmp/models",
-            )
-        )
-    )
+    dimension: int = 1024
 
 
 # ---------------------------------------------------------------------------

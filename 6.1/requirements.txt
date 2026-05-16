@@ -43,18 +43,6 @@ rapidfuzz>=3.6,<4.0
 numpy>=1.26,<3.0
 
 # ============================================================
-# Local Embedding Runtime (Optional but Recommended)
-# ============================================================
-
-# GPU:
-# pip install torch --index-url https://download.pytorch.org/whl/cu121
-#
-# CPU:
-# pip install torch --index-url https://download.pytorch.org/whl/cpu
-
-sentence-transformers>=2.7,<3.0
-
-# ============================================================
 # HuggingFace Inference Runtime
 # ============================================================
 

@@ -24,8 +24,8 @@ from research_discovery.models.paper import (
 
 logger = get_logger(__name__)
 
-BASE_URL = settings.api.crossref_base_url
-MAILTO = settings.api.crossref_mailto
+BASE_URL = settings.crossref.base_url
+MAILTO = settings.crossref.mailto
 
 POLITE_HEADERS = {
     "User-Agent": (
