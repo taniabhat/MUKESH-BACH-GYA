@@ -4,6 +4,7 @@ FastAPI gateway for Research Discovery Platform.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -31,7 +32,8 @@ from research_discovery.config.settings import (
 from research_discovery.core.pipeline import (
     ResearchDiscoveryPipeline,
 )
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
+    HTTPRuntime,
     get_logger,
 )
 from research_discovery.models.paper import (
@@ -164,6 +166,7 @@ async def lifespan(
     logger.info(
         "Research Discovery API shutting down"
     )
+    await HTTPRuntime.shutdown()
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ from collections import Counter
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
     get_logger,
 )
 from research_discovery.models.paper import (

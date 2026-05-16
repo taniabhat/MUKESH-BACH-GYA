@@ -226,6 +226,7 @@ class HTTPRuntime:
         headers: Optional[
             dict
         ] = None,
+        timeout: Optional[float] = None,
     ) -> AsyncGenerator[
         httpx.AsyncClient,
         None,
@@ -235,29 +236,22 @@ class HTTPRuntime:
 
             await cls.startup()
 
-        client = cls._client
+        merged_headers = dict(cls._client.headers)
+        if headers:
+            merged_headers.update(headers)
 
-        original_headers = (
-            dict(client.headers)
+        temp_timeout = (
+            httpx.Timeout(timeout)
+            if timeout is not None
+            else cls._client.timeout
         )
 
-        if headers:
-
-            client.headers.update(
-                headers
-            )
-
-        try:
-
-            yield client
-
-        finally:
-
-            client.headers.clear()
-
-            client.headers.update(
-                original_headers
-            )
+        async with httpx.AsyncClient(
+            transport=cls._client._transport,
+            headers=merged_headers,
+            timeout=temp_timeout,
+        ) as temp_client:
+            yield temp_client
 
 
 @asynccontextmanager
@@ -265,10 +259,12 @@ async def get_http_client(
     headers: Optional[
         dict
     ] = None,
+    timeout: Optional[float] = None,
 ):
 
     async with HTTPRuntime.client(
-        headers=headers
+        headers=headers,
+        timeout=timeout,
     ) as client:
 
         yield client

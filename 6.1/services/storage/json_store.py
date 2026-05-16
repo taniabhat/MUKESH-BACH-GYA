@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
     get_logger,
 )
 from research_discovery.models.paper import (
@@ -247,16 +247,24 @@ class JSONStorageService:
         self,
         result: DiscoveryResult,
         strip_embeddings: bool = True,
+        filepath: Optional[str] = None,
     ) -> str:
 
-        filename = self._build_filename(
-            result
-        )
+        if getattr(result, "query", None) is None:
+            result.query = "result" 
 
-        filepath = (
-            self.storage_dir
-            / filename
-        )
+        if filepath is None:
+            filename = self._build_filename(
+                result
+            )
+
+            filepath = (
+                self.storage_dir
+                / filename
+            )
+        else:
+            import pathlib
+            filepath = pathlib.Path(filepath)
 
         payload = (
             ResultSerializer.serialize(

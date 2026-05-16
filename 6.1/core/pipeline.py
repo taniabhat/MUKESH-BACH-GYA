@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
     Timer,
     get_logger,
 )

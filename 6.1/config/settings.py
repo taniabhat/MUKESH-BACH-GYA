@@ -196,6 +196,8 @@ class OpenAlexConfig:
 
     enabled: bool = True
 
+    max_retries: int = 3
+
     base_url: str = (
         "https://api.openalex.org"
     )
@@ -212,6 +214,8 @@ class OpenAlexConfig:
 class SemanticScholarConfig:
 
     enabled: bool = True
+
+    max_retries: int = 5
 
     base_url: str = (
         "https://api.semanticscholar.org/graph/v1"
@@ -231,6 +235,8 @@ class ArxivConfig:
 
     enabled: bool = True
 
+    max_retries: int = 3
+
     base_url: str = (
         "http://export.arxiv.org/api/query"
     )
@@ -240,6 +246,8 @@ class ArxivConfig:
 class CrossRefConfig:
 
     enabled: bool = True
+
+    max_retries: int = 3
 
     base_url: str = (
         "https://api.crossref.org/works"

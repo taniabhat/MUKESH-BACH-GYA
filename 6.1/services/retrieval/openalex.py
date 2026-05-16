@@ -9,7 +9,7 @@ import urllib.parse
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
     api_retry,
     get_http_client,
     get_logger,
@@ -220,6 +220,7 @@ class OpenAlexAdapter:
 
             return []
 
+    @api_retry(max_attempts=settings.openalex.max_retries)
     async def _fetch_json(
         self,
         url: str,
@@ -227,7 +228,7 @@ class OpenAlexAdapter:
     ) -> dict:
 
         async with get_http_client(
-            timeout=settings.api.http_timeout,
+            timeout=settings.http.timeout,
         ) as client:
 
             response = await client.get(

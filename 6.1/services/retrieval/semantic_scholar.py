@@ -8,8 +8,9 @@ import asyncio
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
     TokenBucket,
+    api_retry,
     get_http_client,
     get_logger,
 )
@@ -167,6 +168,7 @@ class SemanticScholarAdapter:
 
             return None
 
+    @api_retry(max_attempts=settings.semantic_scholar.max_retries)
     async def _get(
         self,
         url: str,
@@ -178,7 +180,7 @@ class SemanticScholarAdapter:
         async with self._semaphore:
 
             async with get_http_client(
-                timeout=settings.api.http_timeout,
+                timeout=settings.http.timeout,
                 headers=self._headers,
             ) as client:
 

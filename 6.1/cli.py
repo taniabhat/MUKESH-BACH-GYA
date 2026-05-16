@@ -14,7 +14,7 @@ from typing import Optional
 from research_discovery.api import (
     DiscoveryAPIService,
 )
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
     get_logger,
 )
 from research_discovery.models.paper import (
@@ -235,7 +235,8 @@ class CLIApplication:
             if command.output_path:
 
                 self.storage.save_result(
-                    result
+                    result,
+                    filepath=command.output_path
                 )
 
                 print(

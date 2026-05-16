@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from research_discovery.core.utils import get_logger
+from research_discovery.core.runtime import get_logger
 from research_discovery.models.paper import (
     ExternalIDs,
     Paper,

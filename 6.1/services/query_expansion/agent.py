@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import (
+from research_discovery.core.runtime import (
     get_http_client,
     get_logger,
 )
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 DEFAULT_QUERY_COUNT = 10
 
-LLM_TIMEOUT_SECONDS = 60
+settings.llm.request_timeout = 60
 
 MIN_QUERY_COUNT = 3
 
@@ -235,7 +235,7 @@ class LLMQueryExpander:
     ) -> dict:
 
         async with get_http_client(
-            timeout=LLM_TIMEOUT_SECONDS,
+            timeout=settings.llm.request_timeout,
         ) as client:
 
             response = await client.post(

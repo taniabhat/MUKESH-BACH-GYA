@@ -8,7 +8,7 @@ import asyncio
 from collections import defaultdict
 from typing import Optional
 
-from research_discovery.core.utils import get_logger
+from research_discovery.core.runtime import get_logger
 from research_discovery.models.paper import (
     CitationEdge,
     CitationRelation,

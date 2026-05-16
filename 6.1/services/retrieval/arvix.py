@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import get_http_client, get_logger
+from research_discovery.core.runtime import api_retry, get_http_client, get_logger
 from research_discovery.models.paper import (
     Author,
     ExternalIDs,
@@ -21,7 +21,7 @@ from research_discovery.models.paper import (
 
 logger = get_logger(__name__)
 
-BASE_URL = settings.api.arxiv_base_url
+BASE_URL = settings.arxiv.base_url
 
 ATOM_NS = "http://www.w3.org/2005/Atom"
 ARXIV_NS = "http://arxiv.org/schemas/atom"
@@ -80,6 +80,7 @@ class ArxivAdapter:
                 error=str(exc),
             )
 
+    @api_retry(max_attempts=settings.arxiv.max_retries)
     async def _fetch_results(
         self,
         query: str,
@@ -100,7 +101,7 @@ class ArxivAdapter:
         )
 
         async with get_http_client(
-            timeout=settings.api.http_timeout,
+            timeout=settings.http.timeout,
             headers={"Accept": "application/atom+xml"},
         ) as client:
 
