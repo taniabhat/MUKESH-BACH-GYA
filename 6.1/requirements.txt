@@ -1,25 +1,66 @@
-# Core
+# ============================================================
+# Research Discovery Module — Requirements
+# Fully open-source. No paid API dependencies.
+# ============================================================
+
+# --- Core web framework ---
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
-httpx>=0.27.0
 pydantic>=2.6.0
 python-dotenv>=1.0.0
+
+# --- Async HTTP (API adapters, LLM calls) ---
+httpx>=0.27.0
 tenacity>=8.2.0
 aiofiles>=23.0.0
 
-# Deduplication
+# --- Deduplication ---
 rapidfuzz>=3.6.0
 
-# Embeddings (install separately if GPU is available)
+# --- Embeddings (local BGE-M3 via sentence-transformers) ---
+# GPU: pip install torch --index-url https://download.pytorch.org/whl/cu121
+# CPU: pip install torch --index-url https://download.pytorch.org/whl/cpu
 sentence-transformers>=2.7.0
 numpy>=1.26.0
 
+# ============================================================
 # Optional: Full production stack
+# Uncomment when deploying beyond local dev
+# ============================================================
+
+# --- Vector database ---
 # qdrant-client>=1.9.0
+
+# --- Relational DB ---
 # sqlalchemy>=2.0.0
 # psycopg2-binary>=2.9.0
+
+# --- Task queue ---
 # celery>=5.3.0
 # redis>=5.0.0
+
+# --- Clustering (topic/gap analysis) ---
 # umap-learn>=0.5.0
 # hdbscan>=0.8.0
+
+# --- Reranker (BGE Reranker v2) ---
 # FlagEmbedding>=1.2.0
+
+# ============================================================
+# LLM Runtime (choose one)
+# ============================================================
+
+# Option A — Ollama client (local dev, easiest setup)
+# Install Ollama separately: https://ollama.com/download
+# Then: ollama pull qwen3:14b
+
+# Option B — vLLM (production, GPU server)
+# pip install vllm  (install separately, not via this file)
+# Start: vllm serve Qwen/Qwen3-14B --port 8080
+
+# ============================================================
+# NOT included (intentionally):
+# - anthropic         ← removed, was used for query expansion
+# - openai            ← not needed, all inference is local
+# - cohere            ← not needed
+# ============================================================
