@@ -1,188 +1,396 @@
 """
-Shared utilities for the Research Discovery Module.
-
-Provides:
-- get_logger()        — structured logger with configurable level
-- get_http_client()   — async httpx client factory with retries
-- api_retry()         — tenacity retry decorator for API calls
-- TokenBucket         — async rate-limiter for Semantic Scholar
-- Timer               — elapsed time helper
+Infrastructure runtime for Research Discovery Platform.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import time
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import AsyncGenerator, Optional
 
 import httpx
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
 
+from research_discovery.config.settings import (
+    settings,
+)
+
 
 # ---------------------------------------------------------------------------
-# Logger
+# Logging Runtime
 # ---------------------------------------------------------------------------
 
-def get_logger(name: str) -> logging.Logger:
+class LoggingRuntime:
     """
-    Returns a module-level logger.
-    Log level is controlled by the LOG_LEVEL environment variable
-    (default: INFO). Configured once on first call.
+    Centralized logging configuration.
     """
-    import os
-    logger = logging.getLogger(name)
-    if not logger.handlers:
-        level = os.getenv("LOG_LEVEL", "INFO").upper()
-        handler = logging.StreamHandler()
+
+    _initialized = False
+
+    @classmethod
+    def initialize(
+        cls,
+    ) -> None:
+
+        if cls._initialized:
+            return
+
+        level = getattr(
+            logging,
+            settings.log_level.upper(),
+            logging.INFO,
+        )
+
         formatter = logging.Formatter(
-            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+            fmt=(
+                "%(asctime)s | "
+                "%(levelname)-8s | "
+                "%(name)s | "
+                "%(message)s"
+            ),
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(getattr(logging, level, logging.INFO))
-        logger.propagate = False
-    return logger
+
+        handler = logging.StreamHandler(
+            sys.stdout
+        )
+
+        handler.setFormatter(
+            formatter
+        )
+
+        root = logging.getLogger()
+
+        root.setLevel(level)
+
+        root.handlers.clear()
+
+        root.addHandler(handler)
+
+        cls._initialized = True
+
+
+def get_logger(
+    name: str,
+) -> logging.Logger:
+
+    LoggingRuntime.initialize()
+
+    return logging.getLogger(name)
 
 
 # ---------------------------------------------------------------------------
-# HTTP Client
+# Runtime Context
 # ---------------------------------------------------------------------------
 
-@asynccontextmanager
-async def get_http_client(
-    timeout: int = 30,
-    headers: Optional[dict] = None,
-) -> AsyncGenerator[httpx.AsyncClient, None]:
-    """
-    Async context manager that yields a configured httpx.AsyncClient.
+@dataclass
+class RuntimeContext:
 
-    Usage:
-        async with get_http_client(timeout=20) as client:
-            resp = await client.get(url)
+    started_at: float
 
-    Automatically closes the client on exit.
-    """
-    default_headers = {
-        "Accept": "application/json",
-        "User-Agent": "ResearchDiscoveryBot/1.0",
-    }
-    if headers:
-        default_headers.update(headers)
+    request_id: Optional[str] = None
 
-    transport = httpx.AsyncHTTPTransport(retries=2)
-    async with httpx.AsyncClient(
-        headers=default_headers,
-        timeout=httpx.Timeout(timeout),
-        transport=transport,
-        follow_redirects=True,
-    ) as client:
-        yield client
+    metadata: dict = None
 
 
 # ---------------------------------------------------------------------------
-# Retry decorator for external API calls
+# Retry Policy
 # ---------------------------------------------------------------------------
 
-def api_retry(max_attempts: int = 3, wait_min: float = 1.0, wait_max: float = 10.0):
-    """
-    Tenacity-based retry decorator for HTTP API calls.
+def _retryable_exception(
+    exc: Exception,
+) -> bool:
 
-    Retries on:
-    - httpx.HTTPStatusError (5xx server errors)
-    - httpx.ConnectError
-    - httpx.TimeoutException
-
-    Usage:
-        @api_retry(max_attempts=3)
-        async def my_api_call():
-            ...
-    """
-    return retry(
-        retry=retry_if_exception_type((
-            httpx.HTTPStatusError,
+    if isinstance(
+        exc,
+        (
             httpx.ConnectError,
             httpx.TimeoutException,
-        )),
-        stop=stop_after_attempt(max_attempts),
-        wait=wait_exponential(min=wait_min, max=wait_max),
+        ),
+    ):
+        return True
+
+    if isinstance(
+        exc,
+        httpx.HTTPStatusError,
+    ):
+
+        if exc.response is None:
+            return True
+
+        return (
+            exc.response.status_code
+            >= 500
+        )
+
+    return False
+
+
+def api_retry(
+    max_attempts: int = (
+        settings.http.max_retries
+    ),
+):
+
+    return retry(
+        retry=retry_if_exception(
+            _retryable_exception
+        ),
+        stop=stop_after_attempt(
+            max_attempts
+        ),
+        wait=wait_exponential(
+            min=1,
+            max=10,
+        ),
         reraise=True,
     )
 
 
 # ---------------------------------------------------------------------------
-# Token Bucket — async rate limiter
+# HTTP Runtime
+# ---------------------------------------------------------------------------
+
+class HTTPRuntime:
+    """
+    Shared async HTTP runtime.
+    """
+
+    _client: Optional[
+        httpx.AsyncClient
+    ] = None
+
+    @classmethod
+    async def startup(
+        cls,
+    ) -> None:
+
+        if cls._client:
+            return
+
+        transport = (
+            httpx.AsyncHTTPTransport(
+                retries=2
+            )
+        )
+
+        cls._client = (
+            httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    settings.http.timeout
+                ),
+                follow_redirects=True,
+                headers={
+                    "Accept": (
+                        "application/json"
+                    ),
+                    "User-Agent": (
+                        settings.http.user_agent
+                    ),
+                },
+                limits=httpx.Limits(
+                    max_connections=(
+                        settings.http.max_connections
+                    ),
+                    max_keepalive_connections=20,
+                ),
+                transport=transport,
+            )
+        )
+
+    @classmethod
+    async def shutdown(
+        cls,
+    ) -> None:
+
+        if not cls._client:
+            return
+
+        await cls._client.aclose()
+
+        cls._client = None
+
+    @classmethod
+    @asynccontextmanager
+    async def client(
+        cls,
+        headers: Optional[
+            dict
+        ] = None,
+    ) -> AsyncGenerator[
+        httpx.AsyncClient,
+        None,
+    ]:
+
+        if cls._client is None:
+
+            await cls.startup()
+
+        client = cls._client
+
+        original_headers = (
+            dict(client.headers)
+        )
+
+        if headers:
+
+            client.headers.update(
+                headers
+            )
+
+        try:
+
+            yield client
+
+        finally:
+
+            client.headers.clear()
+
+            client.headers.update(
+                original_headers
+            )
+
+
+@asynccontextmanager
+async def get_http_client(
+    headers: Optional[
+        dict
+    ] = None,
+):
+
+    async with HTTPRuntime.client(
+        headers=headers
+    ) as client:
+
+        yield client
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiter
 # ---------------------------------------------------------------------------
 
 class TokenBucket:
     """
-    Async token bucket rate limiter.
-
-    Used by Semantic Scholar adapter to stay within 2 req/sec.
-
-    Args:
-        capacity:    max burst tokens
-        refill_rate: tokens added per second
+    Async token bucket limiter.
     """
 
-    def __init__(self, capacity: float = 10.0, refill_rate: float = 2.0):
+    def __init__(
+        self,
+        capacity: float = 10.0,
+        refill_rate: float = 2.0,
+    ):
+
         self.capacity = capacity
+
         self.refill_rate = refill_rate
-        self._tokens = float(capacity)
-        self._last_refill = time.monotonic()
+
+        self._tokens = float(
+            capacity
+        )
+
+        self._last_refill = (
+            time.monotonic()
+        )
+
         self._lock = asyncio.Lock()
 
-    async def acquire(self, tokens: float = 1.0) -> None:
-        """
-        Wait until `tokens` are available, then consume them.
-        Blocks the caller if rate limit is exceeded.
-        """
-        while True:
-            async with self._lock:
-                now = time.monotonic()
-                elapsed = now - self._last_refill
-                self._tokens = min(
-                    self.capacity,
-                    self._tokens + elapsed * self.refill_rate,
-                )
-                self._last_refill = now
+    async def acquire(
+        self,
+        tokens: float = 1.0,
+    ) -> None:
 
-                if self._tokens >= tokens:
+        while True:
+
+            async with self._lock:
+
+                self._refill()
+
+                if (
+                    self._tokens
+                    >= tokens
+                ):
+
                     self._tokens -= tokens
+
                     return
 
-            # Not enough tokens — wait a bit then retry
-            wait_time = (tokens - self._tokens) / self.refill_rate
-            await asyncio.sleep(max(0.05, wait_time))
+                missing = (
+                    tokens
+                    - self._tokens
+                )
+
+            wait_time = (
+                missing
+                / self.refill_rate
+            )
+
+            await asyncio.sleep(
+                max(0.05, wait_time)
+            )
+
+    def _refill(
+        self,
+    ) -> None:
+
+        now = time.monotonic()
+
+        elapsed = (
+            now
+            - self._last_refill
+        )
+
+        self._tokens = min(
+            self.capacity,
+            self._tokens
+            + (
+                elapsed
+                * self.refill_rate
+            ),
+        )
+
+        self._last_refill = now
 
 
 # ---------------------------------------------------------------------------
-# Timer
+# Instrumentation
 # ---------------------------------------------------------------------------
 
 class Timer:
     """
-    Simple wall-clock timer.
-
-    Usage:
-        t = Timer()
-        ...do work...
-        print(t.elapsed())  # → e.g. 3.42
+    Runtime instrumentation timer.
     """
 
-    def __init__(self):
-        self._start = time.monotonic()
+    def __init__(
+        self,
+    ):
 
-    def elapsed(self) -> float:
-        """Returns elapsed seconds, rounded to 2 decimal places."""
-        return round(time.monotonic() - self._start, 2)
+        self._started_at = (
+            time.monotonic()
+        )
 
-    def reset(self) -> None:
-        self._start = time.monotonic()
+    def elapsed(
+        self,
+    ) -> float:
+
+        return round(
+            time.monotonic()
+            - self._started_at,
+            4,
+        )
+
+    def reset(
+        self,
+    ) -> None:
+
+        self._started_at = (
+            time.monotonic()
+        )

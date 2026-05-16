@@ -1,319 +1,528 @@
 """
-Embedding Service — Local BGE-M3 embeddings via sentence-transformers.
-
-BGE-M3 is the best open-source embedding model for this use case:
-- Multilingual (100+ languages)
-- Supports dense, sparse, and hybrid retrieval
-- 1024-dimensional dense vectors
-- Runs on CPU or GPU
-
-Falls back to TF-IDF if sentence-transformers is not installed
-(useful for lightweight testing environments).
-
-NO paid embedding APIs. NO OpenAI. Fully local.
+Embedding and semantic ranking service.
 """
 
 from __future__ import annotations
 
 import math
+from collections import Counter
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import get_logger
-from research_discovery.models.paper import Paper
+from research_discovery.core.utils import (
+    get_logger,
+)
+from research_discovery.models.paper import (
+    Paper,
+    RankingFeatures,
+)
 
 logger = get_logger(__name__)
 
+MAX_ABSTRACT_CHARS = 500
 
-# ---------------------------------------------------------------------------
-# Math utilities
-# ---------------------------------------------------------------------------
+DEFAULT_MMR_LAMBDA = 0.7
 
-def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """
-    Cosine similarity between two vectors.
-    Returns 0.0 on dimension mismatch or zero vectors.
-    """
-    if len(a) != len(b) or not a:
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(x * x for x in b))
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (norm_a * norm_b)
-
-
-def _l2_normalize(vec: list[float]) -> list[float]:
-    """L2-normalize a vector to unit length."""
-    norm = math.sqrt(sum(x * x for x in vec))
-    if norm == 0.0:
-        return vec
-    return [x / norm for x in vec]
+TOKEN_BUCKET_BATCH_SIZE = 64
 
 
 # ---------------------------------------------------------------------------
-# TF-IDF fallback (no ML dependencies needed)
+# Vector Math
 # ---------------------------------------------------------------------------
 
-def _tfidf_embeddings(texts: list[str]) -> list[list[float]]:
-    """
-    Lightweight TF-IDF embeddings for testing without GPU/ML stack.
+class VectorMath:
+    """Vector utility operations."""
 
-    Returns L2-normalized TF-IDF vectors. Dimension = vocabulary size.
-    All vectors are unit-length (comparable via dot product = cosine).
-    """
-    import re
-    from collections import Counter
+    @staticmethod
+    def cosine_similarity(
+        left: list[float],
+        right: list[float],
+    ) -> float:
 
-    # Tokenize
-    def tokenize(text: str) -> list[str]:
-        return re.findall(r"\b[a-z]{2,}\b", text.lower())
+        if (
+            not left
+            or not right
+            or len(left) != len(right)
+        ):
+            return 0.0
 
-    tokenized = [tokenize(t) for t in texts]
-    n_docs = len(tokenized)
+        dot_product = sum(
+            x * y
+            for x, y in zip(left, right)
+        )
 
-    # Build vocabulary
-    vocab: list[str] = []
-    seen_vocab: set[str] = set()
-    for tokens in tokenized:
-        for t in tokens:
-            if t not in seen_vocab:
-                seen_vocab.add(t)
-                vocab.append(t)
-    vocab_index = {t: i for i, t in enumerate(vocab)}
-    vocab_size = len(vocab)
+        left_norm = math.sqrt(
+            sum(x * x for x in left)
+        )
 
-    if vocab_size == 0:
-        return [[0.0] for _ in texts]
+        right_norm = math.sqrt(
+            sum(y * y for y in right)
+        )
 
-    # Document frequency
-    df = Counter()
-    for tokens in tokenized:
-        for t in set(tokens):
-            df[t] += 1
+        if (
+            left_norm == 0.0
+            or right_norm == 0.0
+        ):
+            return 0.0
 
-    # TF-IDF matrix
-    embeddings = []
-    for tokens in tokenized:
-        tf = Counter(tokens)
-        total = len(tokens) or 1
-        vec = [0.0] * vocab_size
-        for t, count in tf.items():
-            if t in vocab_index:
-                tf_score = count / total
-                idf = math.log((n_docs + 1) / (df[t] + 1)) + 1.0
-                vec[vocab_index[t]] = tf_score * idf
-        embeddings.append(_l2_normalize(vec))
+        return dot_product / (
+            left_norm * right_norm
+        )
 
-    return embeddings
+    @staticmethod
+    def l2_normalize(
+        vector: list[float],
+    ) -> list[float]:
+
+        norm = math.sqrt(
+            sum(x * x for x in vector)
+        )
+
+        if norm == 0.0:
+            return vector
+
+        return [
+            x / norm
+            for x in vector
+        ]
 
 
 # ---------------------------------------------------------------------------
-# BGE-M3 Embedding Model (local, GPU-accelerated)
+# TF-IDF Fallback
 # ---------------------------------------------------------------------------
 
-class _BGEModel:
-    """
-    Singleton wrapper for the BGE-M3 sentence-transformers model.
+class TFIDFEmbedder:
+    """Lightweight fallback embedder."""
 
-    Loaded once and reused across all embedding calls.
-    Supports GPU (cuda) and CPU inference.
-    """
-    _instance: Optional["_BGEModel"] = None
-    _model = None
+    @staticmethod
+    def encode(
+        texts: list[str],
+    ) -> list[list[float]]:
 
-    @classmethod
-    def get(cls) -> Optional["_BGEModel"]:
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+        import re
+
+        def tokenize(
+            text: str,
+        ) -> list[str]:
+
+            return re.findall(
+                r"\b[a-z]{2,}\b",
+                text.lower(),
+            )
+
+        tokenized = [
+            tokenize(text)
+            for text in texts
+        ]
+
+        document_count = len(tokenized)
+
+        vocabulary = []
+        seen_tokens = set()
+
+        for tokens in tokenized:
+            for token in tokens:
+                if token not in seen_tokens:
+                    seen_tokens.add(token)
+                    vocabulary.append(token)
+
+        if not vocabulary:
+            return [
+                [0.0]
+                for _ in texts
+            ]
+
+        vocabulary_index = {
+            token: index
+            for index, token in enumerate(
+                vocabulary
+            )
+        }
+
+        document_frequency = Counter()
+
+        for tokens in tokenized:
+            for token in set(tokens):
+                document_frequency[token] += 1
+
+        embeddings = []
+
+        for tokens in tokenized:
+
+            term_frequency = Counter(tokens)
+
+            total_terms = len(tokens) or 1
+
+            vector = [
+                0.0
+            ] * len(vocabulary)
+
+            for token, count in (
+                term_frequency.items()
+            ):
+
+                if token not in vocabulary_index:
+                    continue
+
+                tf_score = (
+                    count / total_terms
+                )
+
+                idf_score = (
+                    math.log(
+                        (
+                            document_count
+                            + 1
+                        )
+                        / (
+                            document_frequency[
+                                token
+                            ]
+                            + 1
+                        )
+                    )
+                    + 1.0
+                )
+
+                vector[
+                    vocabulary_index[token]
+                ] = (
+                    tf_score * idf_score
+                )
+
+            embeddings.append(
+                VectorMath.l2_normalize(
+                    vector
+                )
+            )
+
+        return embeddings
+
+
+# ---------------------------------------------------------------------------
+# Embedding Backend
+# ---------------------------------------------------------------------------
+
+class BGEModel:
+    """
+    Singleton embedding backend.
+    """
+
+    _instance: Optional["BGEModel"] = None
 
     def __init__(self):
-        self._model = None
-        self._load()
 
-    def _load(self) -> None:
+        self._model = None
+
+        self._load_model()
+
+    @classmethod
+    def get(
+        cls,
+    ) -> "BGEModel":
+
+        if cls._instance is None:
+            cls._instance = cls()
+
+        return cls._instance
+
+    def _load_model(
+        self,
+    ) -> None:
+
         try:
-            from sentence_transformers import SentenceTransformer
+
+            from sentence_transformers import (
+                SentenceTransformer,
+            )
+
             import torch
 
-            device = settings.embedding.device
-            # Auto-fallback to CPU if CUDA not available
-            if device == "cuda" and not torch.cuda.is_available():
+            device = (
+                settings.embedding.device
+            )
+
+            if (
+                device == "cuda"
+                and not torch.cuda.is_available()
+            ):
+
+                logger.warning(
+                    "CUDA unavailable — "
+                    "falling back to CPU"
+                )
+
                 device = "cpu"
-                logger.warning("CUDA not available — using CPU for BGE-M3")
 
             logger.info(
-                f"Loading BGE-M3 model: {settings.embedding.model_name} on {device}"
-            )
-            self._model = SentenceTransformer(
+                "Loading embedding model "
+                "model=%s device=%s",
                 settings.embedding.model_name,
-                cache_folder=settings.embedding.cache_dir,
-                device=device,
+                device,
             )
-            logger.info("BGE-M3 loaded successfully")
+
+            self._model = (
+                SentenceTransformer(
+                    settings.embedding.model_name,
+                    cache_folder=(
+                        settings.embedding.cache_dir
+                    ),
+                    device=device,
+                )
+            )
+
+            logger.info(
+                "Embedding model loaded"
+            )
+
         except ImportError:
+
             logger.warning(
-                "sentence-transformers not installed. "
-                "Run: pip install sentence-transformers\n"
-                "Falling back to TF-IDF embeddings (reduced quality)."
+                "sentence-transformers unavailable "
+                "— using TF-IDF fallback"
             )
-            self._model = None
-        except Exception as exc:
-            logger.error(f"BGE-M3 load failed: {exc} — falling back to TF-IDF")
+
             self._model = None
 
-    def encode(self, texts: list[str]) -> list[list[float]]:
-        """
-        Encode a list of texts into dense embeddings.
-        Returns list of float vectors.
-        """
+        except Exception:
+
+            logger.exception(
+                "Embedding model load failed"
+            )
+
+            self._model = None
+
+    def encode(
+        self,
+        texts: list[str],
+    ) -> list[list[float]]:
+
+        if not texts:
+            return []
+
         if self._model is None:
-            return _tfidf_embeddings(texts)
+            return TFIDFEmbedder.encode(
+                texts
+            )
 
         try:
+
             vectors = self._model.encode(
                 texts,
-                batch_size=settings.embedding.batch_size,
-                normalize_embeddings=True,   # L2-normalized — cosine = dot product
+                batch_size=(
+                    settings.embedding.batch_size
+                ),
+                normalize_embeddings=True,
                 show_progress_bar=False,
             )
-            return [v.tolist() for v in vectors]
-        except Exception as exc:
-            logger.error(f"BGE-M3 encode failed: {exc} — falling back to TF-IDF")
-            return _tfidf_embeddings(texts)
+
+            return [
+                vector.tolist()
+                for vector in vectors
+            ]
+
+        except Exception:
+
+            logger.exception(
+                "Embedding generation failed"
+            )
+
+            return TFIDFEmbedder.encode(
+                texts
+            )
 
     @property
-    def dimension(self) -> int:
-        if self._model is not None:
-            return self._model.get_sentence_embedding_dimension() or settings.embedding.dimension
-        return settings.embedding.dimension
+    def dimension(
+        self,
+    ) -> int:
+
+        if self._model is None:
+            return (
+                settings.embedding.dimension
+            )
+
+        return (
+            self._model.get_sentence_embedding_dimension()
+            or settings.embedding.dimension
+        )
 
 
 # ---------------------------------------------------------------------------
-# MMR (Maximal Marginal Relevance) — diversity reranking
+# MMR Reranking
 # ---------------------------------------------------------------------------
 
-def _mmr_rerank(
-    query_embedding: list[float],
-    paper_embeddings: list[list[float]],
-    paper_scores: list[float],
-    top_k: int,
-    lambda_: float = 0.7,
-) -> list[int]:
-    """
-    Maximal Marginal Relevance reranking for diversity.
+class MMRRanker:
+    """Maximal Marginal Relevance reranking."""
 
-    Balances relevance to query vs. diversity from already-selected papers.
+    @staticmethod
+    def rerank(
+        query_embedding: list[float],
+        paper_embeddings: list[list[float]],
+        top_k: int,
+        lambda_: float = DEFAULT_MMR_LAMBDA,
+    ) -> list[int]:
 
-    Args:
-        query_embedding: embedding of the research idea
-        paper_embeddings: list of paper embeddings (same order as papers)
-        paper_scores: initial relevance scores (same order)
-        top_k: number of papers to select
-        lambda_: 0 = max diversity, 1 = max relevance (default 0.7)
+        if not paper_embeddings:
+            return []
 
-    Returns:
-        List of selected indices in MMR order.
-    """
-    n = len(paper_embeddings)
-    if n == 0:
-        return []
+        selected = []
 
-    top_k = min(top_k, n)
-    selected: list[int] = []
-    remaining = list(range(n))
+        remaining = list(
+            range(len(paper_embeddings))
+        )
 
-    # Pre-compute query similarities
-    query_sims = [_cosine_similarity(paper_embeddings[i], query_embedding) for i in range(n)]
+        query_similarities = [
+            VectorMath.cosine_similarity(
+                embedding,
+                query_embedding,
+            )
+            for embedding in paper_embeddings
+        ]
 
-    for _ in range(top_k):
-        if not remaining:
-            break
+        top_k = min(
+            top_k,
+            len(paper_embeddings),
+        )
 
-        if not selected:
-            # First selection: just pick highest relevance
-            best = max(remaining, key=lambda i: query_sims[i])
-        else:
-            # MMR: relevance - redundancy
-            best_score = float("-inf")
-            best = remaining[0]
-            for i in remaining:
-                # Max similarity to any already-selected paper
-                max_sim_to_selected = max(
-                    _cosine_similarity(paper_embeddings[i], paper_embeddings[s])
-                    for s in selected
+        for _ in range(top_k):
+
+            if not remaining:
+                break
+
+            if not selected:
+
+                best_index = max(
+                    remaining,
+                    key=lambda idx: (
+                        query_similarities[idx]
+                    ),
                 )
-                mmr_score = (
-                    lambda_ * query_sims[i]
-                    - (1 - lambda_) * max_sim_to_selected
-                )
-                if mmr_score > best_score:
-                    best_score = mmr_score
-                    best = i
 
-        selected.append(best)
-        remaining.remove(best)
+            else:
 
-    return selected
+                best_score = float("-inf")
+
+                best_index = remaining[0]
+
+                for index in remaining:
+
+                    max_similarity = max(
+                        VectorMath.cosine_similarity(
+                            paper_embeddings[
+                                index
+                            ],
+                            paper_embeddings[
+                                selected_index
+                            ],
+                        )
+                        for selected_index in selected
+                    )
+
+                    mmr_score = (
+                        lambda_
+                        * query_similarities[
+                            index
+                        ]
+                        - (
+                            1 - lambda_
+                        )
+                        * max_similarity
+                    )
+
+                    if mmr_score > best_score:
+
+                        best_score = mmr_score
+
+                        best_index = index
+
+            selected.append(best_index)
+
+            remaining.remove(best_index)
+
+        return selected
 
 
 # ---------------------------------------------------------------------------
-# Public EmbeddingService
+# Public Embedding Service
 # ---------------------------------------------------------------------------
 
 class EmbeddingService:
     """
-    Main embedding service for the Research Discovery Module.
-
-    Responsibilities:
-    - Embed research query (single text)
-    - Batch-embed all papers (title + abstract)
-    - Compute cosine similarity between papers and query
-    - MMR diversity reranking
+    Semantic embedding and reranking service.
     """
 
     def __init__(self):
-        self._model = _BGEModel.get()
+
+        self._model = BGEModel.get()
 
     @property
-    def dimension(self) -> int:
-        return self._model.dimension if self._model else settings.embedding.dimension
+    def dimension(
+        self,
+    ) -> int:
 
-    def embed_query(self, query: str) -> list[float]:
-        """Embed the research idea into a single vector."""
-        result = self._model.encode([query])
-        return result[0]
+        return self._model.dimension
 
-    def embed_papers(self, papers: list[Paper]) -> list[Paper]:
-        """
-        Batch-embed all papers using title + abstract.
-        Modifies papers in-place (sets paper.embedding).
-        Skips papers that already have embeddings.
-        Returns the same list.
-        """
-        to_embed_indices = [i for i, p in enumerate(papers) if not p.embedding]
-        if not to_embed_indices:
+    def embed_query(
+        self,
+        query: str,
+    ) -> list[float]:
+
+        embeddings = self._model.encode(
+            [query]
+        )
+
+        return embeddings[0]
+
+    def embed_papers(
+        self,
+        papers: list[Paper],
+    ) -> list[Paper]:
+
+        pending_indices = [
+            index
+            for index, paper in enumerate(
+                papers
+            )
+            if not paper.embedding
+        ]
+
+        if not pending_indices:
             return papers
 
-        texts = []
-        for i in to_embed_indices:
-            p = papers[i]
-            # Combine title and abstract for richer embedding
-            # BGE-M3 handles long text well (up to 8192 tokens)
-            text = p.title
-            if p.abstract:
-                text += f". {p.abstract[:500]}"  # truncate abstract
-            texts.append(text)
+        texts = [
+            self._build_paper_text(
+                papers[index]
+            )
+            for index in pending_indices
+        ]
 
-        logger.info(f"Embedding {len(texts)} papers with BGE-M3...")
-        embeddings = self._model.encode(texts)
+        logger.info(
+            "Embedding papers count=%s",
+            len(texts),
+        )
 
-        for list_idx, paper_idx in enumerate(to_embed_indices):
-            papers[paper_idx].embedding = embeddings[list_idx]
+        embeddings = self._batch_encode(
+            texts
+        )
 
-        logger.info(f"Embedded {len(texts)} papers (dim={self.dimension})")
+        for embedding_index, paper_index in enumerate(
+            pending_indices
+        ):
+
+            papers[
+                paper_index
+            ].embedding = (
+                embeddings[
+                    embedding_index
+                ]
+            )
+
+        logger.info(
+            "Embedding complete count=%s dim=%s",
+            len(texts),
+            self.dimension,
+        )
+
         return papers
 
     def compute_similarity(
@@ -321,17 +530,50 @@ class EmbeddingService:
         papers: list[Paper],
         query_embedding: list[float],
     ) -> list[Paper]:
-        """
-        Compute cosine similarity between each paper and the query.
-        Stores result in paper.ranking_features.semantic_similarity.
-        Also sets paper.similarity_score for quick access.
-        Returns the same list.
-        """
+
         for paper in papers:
-            if paper.embedding:
-                sim = _cosine_similarity(paper.embedding, query_embedding)
-                paper.similarity_score = round(sim, 6)
-                paper.ranking_features.semantic_similarity = round(sim, 6)
+
+            if not paper.embedding:
+                continue
+
+            similarity = round(
+                VectorMath.cosine_similarity(
+                    paper.embedding,
+                    query_embedding,
+                ),
+                6,
+            )
+
+            paper.similarity_score = (
+                similarity
+            )
+
+            paper.ranking_features = (
+                RankingFeatures(
+                    semantic_similarity=(
+                        similarity
+                    ),
+                    citation_boost=(
+                        paper.ranking_features.citation_boost
+                    ),
+                    recency_boost=(
+                        paper.ranking_features.recency_boost
+                    ),
+                    venue_score=(
+                        paper.ranking_features.venue_score
+                    ),
+                    keyword_overlap=(
+                        paper.ranking_features.keyword_overlap
+                    ),
+                    graph_centrality=(
+                        paper.ranking_features.graph_centrality
+                    ),
+                    mmr_score=(
+                        paper.ranking_features.mmr_score
+                    ),
+                )
+            )
+
         return papers
 
     def mmr_rerank(
@@ -339,24 +581,118 @@ class EmbeddingService:
         papers: list[Paper],
         query_embedding: list[float],
         top_k: int,
-        lambda_: float = 0.7,
+        lambda_: float = DEFAULT_MMR_LAMBDA,
     ) -> list[Paper]:
-        """
-        Rerank papers using MMR for diversity.
-        Returns top_k papers in MMR order.
-        """
-        embeddings = [p.embedding for p in papers]
-        scores = [p.similarity_score for p in papers]
 
-        selected_indices = _mmr_rerank(
-            query_embedding, embeddings, scores, top_k=top_k, lambda_=lambda_
+        embeddings = [
+            paper.embedding
+            for paper in papers
+        ]
+
+        selected_indices = (
+            MMRRanker.rerank(
+                query_embedding=(
+                    query_embedding
+                ),
+                paper_embeddings=(
+                    embeddings
+                ),
+                top_k=top_k,
+                lambda_=lambda_,
+            )
         )
 
-        result = []
-        for rank, idx in enumerate(selected_indices):
-            paper = papers[idx]
-            # Store MMR score (position-based decay)
-            paper.ranking_features.mmr_score = round(1.0 - (rank / max(len(selected_indices), 1)), 4)
-            result.append(paper)
+        reranked = []
 
-        return result
+        for rank, paper_index in enumerate(
+            selected_indices
+        ):
+
+            paper = papers[paper_index]
+
+            paper.ranking_features = (
+                RankingFeatures(
+                    semantic_similarity=(
+                        paper.ranking_features.semantic_similarity
+                    ),
+                    citation_boost=(
+                        paper.ranking_features.citation_boost
+                    ),
+                    recency_boost=(
+                        paper.ranking_features.recency_boost
+                    ),
+                    venue_score=(
+                        paper.ranking_features.venue_score
+                    ),
+                    keyword_overlap=(
+                        paper.ranking_features.keyword_overlap
+                    ),
+                    graph_centrality=(
+                        paper.ranking_features.graph_centrality
+                    ),
+                    mmr_score=round(
+                        1.0
+                        - (
+                            rank
+                            / max(
+                                len(
+                                    selected_indices
+                                ),
+                                1,
+                            )
+                        ),
+                        4,
+                    ),
+                )
+            )
+
+            reranked.append(paper)
+
+        return reranked
+
+    def _batch_encode(
+        self,
+        texts: list[str],
+    ) -> list[list[float]]:
+
+        all_embeddings = []
+
+        for start in range(
+            0,
+            len(texts),
+            TOKEN_BUCKET_BATCH_SIZE,
+        ):
+
+            batch = texts[
+                start:
+                start
+                + TOKEN_BUCKET_BATCH_SIZE
+            ]
+
+            batch_embeddings = (
+                self._model.encode(batch)
+            )
+
+            all_embeddings.extend(
+                batch_embeddings
+            )
+
+        return all_embeddings
+
+    @staticmethod
+    def _build_paper_text(
+        paper: Paper,
+    ) -> str:
+
+        text = paper.title
+
+        if paper.abstract:
+
+            text += (
+                ". "
+                + paper.abstract[
+                    :MAX_ABSTRACT_CHARS
+                ]
+            )
+
+        return text

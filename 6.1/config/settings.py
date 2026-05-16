@@ -1,140 +1,382 @@
 """
-Global configuration and settings for Research Discovery Module.
-
-Open-source stack:
-- LLM:        Qwen3 via Ollama (dev) or vLLM (production)
-- Embeddings: BGE-M3 via sentence-transformers (local)
-- APIs:       OpenAlex, Semantic Scholar (free), arXiv (free), CrossRef (free)
-- No paid API keys required.
+Global configuration for Research Discovery Platform.
 """
+
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+# ---------------------------------------------------------------------------
+# Provider Types
+# ---------------------------------------------------------------------------
+
+class LLMProvider(str, Enum):
+    OLLAMA = "ollama"
+    VLLM = "vllm"
+    OPENAI = "openai"
+    HUGGINGFACE = "huggingface"
+    TOGETHER = "together"
+    GROQ = "groq"
+    LMSTUDIO = "lmstudio"
+
+
+class EmbeddingProvider(str, Enum):
+    LOCAL = "local"
+    HUGGINGFACE = "huggingface"
+    OPENAI = "openai"
+
+
+# ---------------------------------------------------------------------------
+# HTTP
+# ---------------------------------------------------------------------------
+
 @dataclass
-class APIConfig:
-    # -----------------------------------------------------------------------
-    # LLM — Local inference (Qwen3)
-    # -----------------------------------------------------------------------
-    # Set USE_VLLM=true in production (vLLM server).
-    # Default: Ollama (local dev).
-    use_vllm: bool = field(
-        default_factory=lambda: os.getenv("USE_VLLM", "false").lower() == "true"
-    )
+class HTTPConfig:
 
-    # Ollama endpoint (local development)
-    ollama_base_url: str = field(
-        default_factory=lambda: os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    )
+    timeout: int = 30
 
-    # vLLM endpoint (production — OpenAI-compatible)
-    vllm_base_url: str = field(
-        default_factory=lambda: os.getenv("VLLM_BASE_URL", "http://localhost:8080/v1")
-    )
-
-    # Model name for query expansion
-    # Ollama: "qwen3:14b"  |  vLLM: model name as loaded in vLLM server
-    qwen3_model: str = field(
-        default_factory=lambda: os.getenv("QWEN3_MODEL", "qwen3:14b")
-    )
-
-    # LLM generation parameters
-    llm_temperature: float = 0.3
-    llm_max_tokens: int = 1024
-
-    # -----------------------------------------------------------------------
-    # Semantic Scholar (free tier — no key needed, key gives higher rate limit)
-    # -----------------------------------------------------------------------
-    semantic_scholar_api_key: str = field(
-        default_factory=lambda: os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
-    )
-    semantic_scholar_base_url: str = "https://api.semanticscholar.org/graph/v1"
-    semantic_scholar_rps: int = 5  # semaphore concurrency limit
-
-    # -----------------------------------------------------------------------
-    # OpenAlex (completely free — polite pool via email header)
-    # -----------------------------------------------------------------------
-    openalex_base_url: str = "https://api.openalex.org"
-    openalex_email: str = field(
-        default_factory=lambda: os.getenv("OPENALEX_EMAIL", "researcher@example.com")
-    )
-
-    # -----------------------------------------------------------------------
-    # arXiv (completely free — no key)
-    # -----------------------------------------------------------------------
-    arxiv_base_url: str = "http://export.arxiv.org/api/query"
-
-    # -----------------------------------------------------------------------
-    # CrossRef (completely free — polite pool via mailto header)
-    # -----------------------------------------------------------------------
-    crossref_base_url: str = "https://api.crossref.org/works"
-    crossref_mailto: str = field(
-        default_factory=lambda: os.getenv("CROSSREF_MAILTO", "researcher@example.com")
-    )
-
-    # -----------------------------------------------------------------------
-    # HTTP
-    # -----------------------------------------------------------------------
-    http_timeout: int = 30
     max_retries: int = 3
 
+    max_connections: int = 100
+
+    user_agent: str = (
+        "ResearchDiscovery/1.0"
+    )
+
+
+# ---------------------------------------------------------------------------
+# LLM Provider Config
+# ---------------------------------------------------------------------------
 
 @dataclass
-class RankingWeights:
-    semantic_similarity: float = 0.60
-    citation_boost: float = 0.15
-    recency_boost: float = 0.10
-    venue_score: float = 0.10
-    keyword_overlap: float = 0.05
+class LLMConfig:
+
+    provider: LLMProvider = field(
+        default_factory=lambda: LLMProvider(
+            os.getenv(
+                "LLM_PROVIDER",
+                "ollama",
+            )
+        )
+    )
+
+    model_name: str = field(
+        default_factory=lambda: os.getenv(
+            "LLM_MODEL",
+            "qwen3:14b",
+        )
+    )
+
+    api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv(
+            "LLM_API_KEY",
+        )
+    )
+
+    base_url: str = field(
+        default_factory=lambda: os.getenv(
+            "LLM_BASE_URL",
+            "http://localhost:11434",
+        )
+    )
+
+    temperature: float = field(
+        default_factory=lambda: float(
+            os.getenv(
+                "LLM_TEMPERATURE",
+                "0.3",
+            )
+        )
+    )
+
+    max_tokens: int = field(
+        default_factory=lambda: int(
+            os.getenv(
+                "LLM_MAX_TOKENS",
+                "1024",
+            )
+        )
+    )
+
+    request_timeout: int = field(
+        default_factory=lambda: int(
+            os.getenv(
+                "LLM_TIMEOUT",
+                "60",
+            )
+        )
+    )
 
 
-@dataclass
-class RetrievalConfig:
-    num_expansion_queries: int = 10
-    results_per_query: int = 20
-    citation_expansion_top_k: int = 20
-    fuzzy_dedup_threshold: float = 0.94
-    final_corpus_min: int = 50
-    final_corpus_max: int = 150
-    mmr_lambda: float = 0.7
-
+# ---------------------------------------------------------------------------
+# Embedding Config
+# ---------------------------------------------------------------------------
 
 @dataclass
 class EmbeddingConfig:
-    # BGE-M3: best open-source multilingual embedding model
-    # Supports dense + sparse + hybrid retrieval
+
+    provider: EmbeddingProvider = field(
+        default_factory=lambda: EmbeddingProvider(
+            os.getenv(
+                "EMBEDDING_PROVIDER",
+                "local",
+            )
+        )
+    )
+
     model_name: str = field(
-        default_factory=lambda: os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
+        default_factory=lambda: os.getenv(
+            "EMBEDDING_MODEL",
+            "BAAI/bge-m3",
+        )
     )
-    dimension: int = 1024
-    batch_size: int = 32
-    # Use GPU if available
+
+    api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv(
+            "EMBEDDING_API_KEY",
+        )
+    )
+
+    base_url: Optional[str] = field(
+        default_factory=lambda: os.getenv(
+            "EMBEDDING_BASE_URL",
+        )
+    )
+
+    dimension: int = field(
+        default_factory=lambda: int(
+            os.getenv(
+                "EMBEDDING_DIMENSION",
+                "1024",
+            )
+        )
+    )
+
+    batch_size: int = field(
+        default_factory=lambda: int(
+            os.getenv(
+                "EMBEDDING_BATCH_SIZE",
+                "32",
+            )
+        )
+    )
+
     device: str = field(
-        default_factory=lambda: os.getenv("EMBEDDING_DEVICE", "cuda")
+        default_factory=lambda: os.getenv(
+            "EMBEDDING_DEVICE",
+            "cuda",
+        )
     )
-    # Cache model in memory after first load
-    cache_dir: str = field(
-        default_factory=lambda: os.getenv("MODEL_CACHE_DIR", "/tmp/models")
+
+    cache_dir: Path = field(
+        default_factory=lambda: Path(
+            os.getenv(
+                "MODEL_CACHE_DIR",
+                "/tmp/models",
+            )
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Retrieval APIs
+# ---------------------------------------------------------------------------
+
+@dataclass
+class OpenAlexConfig:
+
+    enabled: bool = True
+
+    base_url: str = (
+        "https://api.openalex.org"
+    )
+
+    email: str = field(
+        default_factory=lambda: os.getenv(
+            "OPENALEX_EMAIL",
+            "researcher@example.com",
+        )
     )
 
 
 @dataclass
+class SemanticScholarConfig:
+
+    enabled: bool = True
+
+    base_url: str = (
+        "https://api.semanticscholar.org/graph/v1"
+    )
+
+    api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv(
+            "SEMANTIC_SCHOLAR_API_KEY",
+        )
+    )
+
+    rps_limit: int = 5
+
+
+@dataclass
+class ArxivConfig:
+
+    enabled: bool = True
+
+    base_url: str = (
+        "http://export.arxiv.org/api/query"
+    )
+
+
+@dataclass
+class CrossRefConfig:
+
+    enabled: bool = True
+
+    base_url: str = (
+        "https://api.crossref.org/works"
+    )
+
+    mailto: str = field(
+        default_factory=lambda: os.getenv(
+            "CROSSREF_MAILTO",
+            "researcher@example.com",
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Retrieval Pipeline
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RetrievalConfig:
+
+    num_expansion_queries: int = 10
+
+    results_per_query: int = 20
+
+    citation_expansion_top_k: int = 20
+
+    fuzzy_dedup_threshold: float = 0.94
+
+    final_corpus_min: int = 50
+
+    final_corpus_max: int = 150
+
+    mmr_lambda: float = 0.7
+
+
+# ---------------------------------------------------------------------------
+# Ranking
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RankingConfig:
+
+    semantic_similarity: float = 0.60
+
+    citation_boost: float = 0.15
+
+    recency_boost: float = 0.10
+
+    venue_score: float = 0.10
+
+    keyword_overlap: float = 0.05
+
+
+# ---------------------------------------------------------------------------
+# Storage
+# ---------------------------------------------------------------------------
+
+@dataclass
+class StorageConfig:
+
+    storage_dir: Path = field(
+        default_factory=lambda: Path(
+            os.getenv(
+                "STORAGE_DIR",
+                "/tmp/research_discovery",
+            )
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Root Settings
+# ---------------------------------------------------------------------------
+
+@dataclass
 class Settings:
-    api: APIConfig = field(default_factory=APIConfig)
-    ranking: RankingWeights = field(default_factory=RankingWeights)
-    retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
-    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+
     debug: bool = field(
-        default_factory=lambda: os.getenv("DEBUG", "false").lower() == "true"
+        default_factory=lambda: (
+            os.getenv(
+                "DEBUG",
+                "false",
+            ).lower()
+            == "true"
+        )
     )
+
     log_level: str = field(
-        default_factory=lambda: os.getenv("LOG_LEVEL", "INFO")
+        default_factory=lambda: os.getenv(
+            "LOG_LEVEL",
+            "INFO",
+        )
+    )
+
+    http: HTTPConfig = field(
+        default_factory=HTTPConfig
+    )
+
+    llm: LLMConfig = field(
+        default_factory=LLMConfig
+    )
+
+    embedding: EmbeddingConfig = field(
+        default_factory=EmbeddingConfig
+    )
+
+    retrieval: RetrievalConfig = field(
+        default_factory=RetrievalConfig
+    )
+
+    ranking: RankingConfig = field(
+        default_factory=RankingConfig
+    )
+
+    storage: StorageConfig = field(
+        default_factory=StorageConfig
+    )
+
+    openalex: OpenAlexConfig = field(
+        default_factory=OpenAlexConfig
+    )
+
+    semantic_scholar: SemanticScholarConfig = (
+        field(
+            default_factory=(
+                SemanticScholarConfig
+            )
+        )
+    )
+
+    arxiv: ArxivConfig = field(
+        default_factory=ArxivConfig
+    )
+
+    crossref: CrossRefConfig = field(
+        default_factory=CrossRefConfig
     )
 
 
-# Singleton — import this everywhere
 settings = Settings()

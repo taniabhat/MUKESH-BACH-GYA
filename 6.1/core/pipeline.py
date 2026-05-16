@@ -1,279 +1,583 @@
 """
-Research Discovery Pipeline Orchestrator.
-
-Ties all modules together into the full async pipeline:
-
-  User Research Idea
-       ↓
-  Query Expansion Agent
-       ↓
-  Parallel Retrieval (OpenAlex + S2 + arXiv + CrossRef enrichment)
-       ↓
-  Deduplication
-       ↓
-  Embedding Generation
-       ↓
-  First-Level Ranking
-       ↓
-  Citation Graph Expansion
-       ↓
-  Re-embed + Second-Level Ranking (with MMR)
-       ↓
-  Final Research Corpus (tiered)
+Research discovery orchestration runtime.
 """
 
 from __future__ import annotations
 
 import asyncio
-import traceback
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Protocol
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import get_logger, Timer
+from research_discovery.core.utils import (
+    Timer,
+    get_logger,
+)
 from research_discovery.models.paper import (
     DiscoveryResult,
     Paper,
     PaperTier,
     ResearchQuery,
 )
-from research_discovery.services.citation_graph.expander import CitationGraphExpander
-from research_discovery.services.dedup.engine import DeduplicationEngine
-from research_discovery.services.embedding.service import EmbeddingService
-from research_discovery.services.query_expansion.agent import QueryExpansionAgent
-from research_discovery.services.ranking.engine import RankingEngine
-from research_discovery.services.retrieval.arxiv import ArxivAdapter
-from research_discovery.services.retrieval.crossref import CrossRefAdapter
-from research_discovery.services.retrieval.openalex import OpenAlexAdapter
-from research_discovery.services.retrieval.semantic_scholar import SemanticScholarAdapter
 
 logger = get_logger(__name__)
 
 
-class ResearchDiscoveryPipeline:
-    """
-    Full end-to-end research discovery pipeline.
+# ---------------------------------------------------------------------------
+# Runtime Context
+# ---------------------------------------------------------------------------
 
-    Usage:
-        pipeline = ResearchDiscoveryPipeline()
-        result = await pipeline.run("Using LLMs for automated code review")
-    """
+@dataclass
+class PipelineContext:
+
+    research_idea: str
+
+    research_query: ResearchQuery | None = None
+
+    query_embedding: list[float] = field(
+        default_factory=list
+    )
+
+    raw_papers: list[Paper] = field(
+        default_factory=list
+    )
+
+    deduplicated_papers: list[Paper] = field(
+        default_factory=list
+    )
+
+    ranked_papers: list[Paper] = field(
+        default_factory=list
+    )
+
+    final_papers: list[Paper] = field(
+        default_factory=list
+    )
+
+    metadata: dict = field(
+        default_factory=dict
+    )
+
+
+# ---------------------------------------------------------------------------
+# Provider Contracts
+# ---------------------------------------------------------------------------
+
+class RetrievalProvider(
+    Protocol
+):
+
+    async def search(
+        self,
+        query: str,
+        limit: int,
+    ):
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Service Container
+# ---------------------------------------------------------------------------
+
+class ServiceContainer:
+
+    def __init__(self):
+
+        from research_discovery.services.query_expansion.agent import (
+            QueryExpansionAgent,
+        )
+
+        from research_discovery.services.embedding.service import (
+            EmbeddingService,
+        )
+
+        from research_discovery.services.ranking.engine import (
+            RankingEngine,
+        )
+
+        from research_discovery.services.dedup.engine import (
+            DeduplicationEngine,
+        )
+
+        from research_discovery.services.citation_graph.expander import (
+            CitationGraphExpander,
+        )
+
+        from research_discovery.services.retrieval.openalex import (
+            OpenAlexAdapter,
+        )
+
+        from research_discovery.services.retrieval.semantic_scholar import (
+            SemanticScholarAdapter,
+        )
+
+        from research_discovery.services.retrieval.arxiv import (
+            ArxivAdapter,
+        )
+
+        from research_discovery.services.retrieval.crossref import (
+            CrossRefAdapter,
+        )
+
+        self.query_expander = (
+            QueryExpansionAgent(
+                num_queries=(
+                    settings.retrieval.num_expansion_queries
+                )
+            )
+        )
+
+        self.embedder = (
+            EmbeddingService()
+        )
+
+        self.ranker = (
+            RankingEngine(
+                mmr_lambda=(
+                    settings.retrieval.mmr_lambda
+                ),
+                max_papers=(
+                    settings.retrieval.final_corpus_max
+                ),
+            )
+        )
+
+        self.deduplicator = (
+            DeduplicationEngine(
+                fuzzy_threshold=(
+                    settings.retrieval.fuzzy_dedup_threshold
+                )
+            )
+        )
+
+        self.citation_expander = (
+            CitationGraphExpander(
+                top_k=(
+                    settings.retrieval.citation_expansion_top_k
+                )
+            )
+        )
+
+        self.crossref = (
+            CrossRefAdapter()
+        )
+
+        self.retrievers: list[
+            RetrievalProvider
+        ] = [
+            OpenAlexAdapter(),
+            SemanticScholarAdapter(),
+            ArxivAdapter(),
+        ]
+
+
+# ---------------------------------------------------------------------------
+# Pipeline Stages
+# ---------------------------------------------------------------------------
+
+class QueryExpansionStage:
 
     def __init__(
         self,
-        num_expansion_queries: int = 10,
-        results_per_query: int = 20,
-        use_semantic_scholar: bool = True,
-        use_arxiv: bool = True,
-        use_crossref_enrichment: bool = True,
-        use_citation_expansion: bool = True,
-        mmr_lambda: float = 0.7,
-        max_final_papers: int = 150,
+        services: ServiceContainer,
     ):
-        self.num_expansion_queries = num_expansion_queries
-        self.results_per_query = results_per_query
-        self.use_semantic_scholar = use_semantic_scholar
-        self.use_arxiv = use_arxiv
-        self.use_crossref_enrichment = use_crossref_enrichment
-        self.use_citation_expansion = use_citation_expansion
-        self.max_final_papers = max_final_papers
 
-        # Initialize all services
-        self._query_expander = QueryExpansionAgent(num_queries=num_expansion_queries)
-        self._openalex = OpenAlexAdapter()
-        self._semantic_scholar = SemanticScholarAdapter()
-        self._arxiv = ArxivAdapter()
-        self._crossref = CrossRefAdapter()
-        self._dedup = DeduplicationEngine(
-            fuzzy_threshold=settings.retrieval.fuzzy_dedup_threshold
-        )
-        self._embedder = EmbeddingService()
-        self._ranker = RankingEngine(mmr_lambda=mmr_lambda, max_papers=max_final_papers)
-        self._citation_expander = CitationGraphExpander(
-            top_k=settings.retrieval.citation_expansion_top_k
+        self.services = services
+
+    async def run(
+        self,
+        context: PipelineContext,
+    ) -> None:
+
+        queries = (
+            await self.services.query_expander.expand(
+                context.research_idea
+            )
         )
 
-    # -----------------------------------------------------------------------
-    # Step 1: Query Expansion
-    # -----------------------------------------------------------------------
+        context.research_query = (
+            ResearchQuery(
+                original_idea=(
+                    context.research_idea
+                ),
+                expanded_queries=queries,
+            )
+        )
 
-    async def _expand_queries(self, idea: str) -> ResearchQuery:
-        queries = await self._query_expander.expand(idea)
-        return ResearchQuery(original_idea=idea, expanded_queries=queries)
 
-    # -----------------------------------------------------------------------
-    # Step 2: Parallel Retrieval
-    # -----------------------------------------------------------------------
+class RetrievalStage:
 
-    async def _retrieve_for_query(self, query: str) -> list[Paper]:
-        """Run all enabled APIs in parallel for a single query."""
-        tasks = [self._openalex.search(query, per_page=self.results_per_query)]
+    def __init__(
+        self,
+        services: ServiceContainer,
+    ):
 
-        if self.use_semantic_scholar:
-            tasks.append(self._semantic_scholar.search(query, limit=self.results_per_query))
+        self.services = services
 
-        if self.use_arxiv:
-            tasks.append(self._arxiv.search(query, max_results=self.results_per_query))
+    async def run(
+        self,
+        context: PipelineContext,
+    ) -> None:
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        semaphore = asyncio.Semaphore(4)
 
-        papers: list[Paper] = []
-        for r in results:
-            if isinstance(r, Exception):
-                logger.warning(f"Retrieval task failed: {r}")
-            else:
-                papers.extend(r.papers)
+        async def retrieve_query(
+            query: str,
+        ) -> list[Paper]:
 
-        return papers
-
-    async def _retrieve_all(self, queries: list[str]) -> list[Paper]:
-        """
-        Fan out across all expanded queries, concurrently.
-        Limit parallelism to avoid API abuse.
-        """
-        semaphore = asyncio.Semaphore(4)  # max 4 concurrent query groups
-
-        async def _bounded(q: str) -> list[Paper]:
             async with semaphore:
-                return await self._retrieve_for_query(q)
 
-        results = await asyncio.gather(*[_bounded(q) for q in queries], return_exceptions=True)
+                tasks = [
+                    provider.search(
+                        query,
+                        limit=(
+                            settings.retrieval.results_per_query
+                        ),
+                    )
+                    for provider in (
+                        self.services.retrievers
+                    )
+                ]
 
-        all_papers: list[Paper] = []
-        for r in results:
-            if isinstance(r, list):
-                all_papers.extend(r)
-            elif isinstance(r, Exception):
-                logger.warning(f"Query retrieval error: {r}")
+                results = (
+                    await asyncio.gather(
+                        *tasks,
+                        return_exceptions=True,
+                    )
+                )
 
-        logger.info(f"Raw retrieval: {len(all_papers)} total papers before dedup")
-        return all_papers
+                papers = []
 
-    # -----------------------------------------------------------------------
-    # Step 3: CrossRef Enrichment
-    # -----------------------------------------------------------------------
+                for result in results:
 
-    async def _enrich(self, papers: list[Paper]) -> list[Paper]:
-        if not self.use_crossref_enrichment:
-            return papers
-        return await self._crossref.enrich_papers(papers)
+                    if isinstance(
+                        result,
+                        Exception,
+                    ):
 
-    # -----------------------------------------------------------------------
-    # Full Pipeline
-    # -----------------------------------------------------------------------
+                        logger.warning(
+                            "Retrieval provider failed"
+                        )
 
-    async def run(self, research_idea: str) -> DiscoveryResult:
-        """
-        Execute the full discovery pipeline.
+                        continue
 
-        Args:
-            research_idea: Natural language description of the research topic
+                    papers.extend(
+                        result.papers
+                    )
 
-        Returns:
-            DiscoveryResult with tiered paper lists
-        """
+                return papers
+
+        query_results = (
+            await asyncio.gather(
+                *[
+                    retrieve_query(query)
+                    for query in (
+                        context.research_query.expanded_queries
+                    )
+                ]
+            )
+        )
+
+        for papers in query_results:
+            context.raw_papers.extend(
+                papers
+            )
+
+
+class EnrichmentStage:
+
+    def __init__(
+        self,
+        services: ServiceContainer,
+    ):
+
+        self.services = services
+
+    async def run(
+        self,
+        context: PipelineContext,
+    ) -> None:
+
+        context.raw_papers = (
+            await self.services.crossref.enrich_papers(
+                context.raw_papers
+            )
+        )
+
+
+class DeduplicationStage:
+
+    def __init__(
+        self,
+        services: ServiceContainer,
+    ):
+
+        self.services = services
+
+    async def run(
+        self,
+        context: PipelineContext,
+    ) -> None:
+
+        context.deduplicated_papers = (
+            self.services.deduplicator.deduplicate(
+                context.raw_papers
+            )
+        )
+
+
+class EmbeddingStage:
+
+    def __init__(
+        self,
+        services: ServiceContainer,
+    ):
+
+        self.services = services
+
+    async def run(
+        self,
+        context: PipelineContext,
+    ) -> None:
+
+        context.query_embedding = (
+            self.services.embedder.embed_query(
+                context.research_idea
+            )
+        )
+
+        self.services.embedder.embed_papers(
+            context.deduplicated_papers
+        )
+
+        self.services.embedder.compute_similarity(
+            context.deduplicated_papers,
+            context.query_embedding,
+        )
+
+
+class RankingStage:
+
+    def __init__(
+        self,
+        services: ServiceContainer,
+    ):
+
+        self.services = services
+
+    async def run(
+        self,
+        context: PipelineContext,
+    ) -> None:
+
+        context.ranked_papers = (
+            self.services.ranker.rank(
+                context.deduplicated_papers,
+                context.research_idea,
+                context.query_embedding,
+            )
+        )
+
+
+class CitationExpansionStage:
+
+    def __init__(
+        self,
+        services: ServiceContainer,
+    ):
+
+        self.services = services
+
+    async def run(
+        self,
+        context: PipelineContext,
+    ) -> None:
+
+        expanded, edges = (
+            await self.services.citation_expander.expand(
+                context.ranked_papers
+            )
+        )
+
+        expanded = (
+            self.services.deduplicator.deduplicate(
+                expanded
+            )
+        )
+
+        self.services.embedder.embed_papers(
+            expanded
+        )
+
+        self.services.embedder.compute_similarity(
+            expanded,
+            context.query_embedding,
+        )
+
+        expanded = (
+            self.services.citation_expander.apply_graph_scores(
+                expanded,
+                edges,
+            )
+        )
+
+        context.final_papers = (
+            self.services.ranker.rank(
+                expanded,
+                context.research_idea,
+                context.query_embedding,
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# Pipeline Runtime
+# ---------------------------------------------------------------------------
+
+class ResearchDiscoveryPipeline:
+
+    def __init__(self):
+
+        self.services = (
+            ServiceContainer()
+        )
+
+        self.stages = [
+            QueryExpansionStage(
+                self.services
+            ),
+            RetrievalStage(
+                self.services
+            ),
+            EnrichmentStage(
+                self.services
+            ),
+            DeduplicationStage(
+                self.services
+            ),
+            EmbeddingStage(
+                self.services
+            ),
+            RankingStage(
+                self.services
+            ),
+            CitationExpansionStage(
+                self.services
+            ),
+        ]
+
+    async def run(
+        self,
+        research_idea: str,
+    ) -> DiscoveryResult:
+
         timer = Timer()
-        logger.info(f"=== Research Discovery Pipeline START ===")
-        logger.info(f"Idea: '{research_idea}'")
 
-        try:
-            # Step 1: Query Expansion
-            logger.info("Step 1/7: Query Expansion")
-            research_query = await self._expand_queries(research_idea)
-            logger.info(f"  → {len(research_query.expanded_queries)} queries generated")
+        context = PipelineContext(
+            research_idea=research_idea
+        )
 
-            # Step 2: Parallel Retrieval
-            logger.info("Step 2/7: Parallel Retrieval")
-            raw_papers = await self._retrieve_all(research_query.expanded_queries)
+        logger.info(
+            "Pipeline start idea='%s'",
+            research_idea,
+        )
 
-            # Step 3: CrossRef Enrichment
-            logger.info("Step 3/7: CrossRef Enrichment")
-            raw_papers = await self._enrich(raw_papers)
+        for index, stage in enumerate(
+            self.stages,
+            start=1,
+        ):
 
-            # Step 4: Deduplication
-            logger.info("Step 4/7: Deduplication")
-            deduped = self._dedup.deduplicate(raw_papers)
-
-            # Step 5: Embedding Generation
-            logger.info("Step 5/7: Embedding Generation")
-            query_embedding = self._embedder.embed_query(research_idea)
-            embedded_papers = self._embedder.embed_papers(deduped)
-            papers_with_scores = self._embedder.compute_similarity(
-                embedded_papers, query_embedding
-            )
-
-            # Step 6: First-level Ranking
-            logger.info("Step 6/7: First-Level Ranking")
-            ranked = self._ranker.rank(papers_with_scores, research_idea, query_embedding)
-
-            # Step 7: Citation Graph Expansion (optional)
-            if self.use_citation_expansion:
-                logger.info("Step 7/7: Citation Graph Expansion")
-                expanded, edges = await self._citation_expander.expand(ranked)
-
-                # Dedup again after expansion
-                expanded = self._dedup.deduplicate(expanded)
-
-                # Embed new papers only
-                new_papers = [p for p in expanded if not p.embedding]
-                if new_papers:
-                    self._embedder.embed_papers(new_papers)
-                    self._embedder.compute_similarity(new_papers, query_embedding)
-
-                # Apply graph centrality scores
-                expanded = self._citation_expander.apply_graph_scores(expanded, edges)
-
-                # Second-level ranking with all papers
-                final_papers = self._ranker.rank(expanded, research_idea, query_embedding)
-            else:
-                logger.info("Step 7/7: Citation expansion disabled — using first-level ranking")
-                final_papers = ranked
-
-            # Partition into tiers
-            tiers: dict[str, list[Paper]] = {
-                PaperTier.HIGHLY_RELEVANT: [],
-                PaperTier.RELEVANT_BACKGROUND: [],
-                PaperTier.ADJACENT_WORK: [],
-                PaperTier.HISTORICAL_FOUNDATIONS: [],
-            }
-            for paper in final_papers:
-                tier_key = paper.tier or PaperTier.ADJACENT_WORK
-                tiers[tier_key].append(paper)
-
-            elapsed = timer.elapsed()
             logger.info(
-                f"=== Pipeline DONE in {elapsed}s | "
-                f"Total papers: {len(final_papers)} ==="
+                "Running stage %s/%s: %s",
+                index,
+                len(self.stages),
+                stage.__class__.__name__,
             )
 
-            return DiscoveryResult(
-                query=research_query,
-                highly_relevant=tiers[PaperTier.HIGHLY_RELEVANT],
-                relevant_background=tiers[PaperTier.RELEVANT_BACKGROUND],
-                adjacent_work=tiers[PaperTier.ADJACENT_WORK],
-                historical_foundations=tiers[PaperTier.HISTORICAL_FOUNDATIONS],
-                total_papers=len(final_papers),
-                processing_time_seconds=elapsed,
-                metadata={
-                    "num_expansion_queries": len(research_query.expanded_queries),
-                    "raw_retrieved": len(raw_papers),
-                    "after_dedup": len(deduped),
-                    "after_citation_expansion": len(final_papers),
-                    "embedding_dimension": self._embedder.dimension,
-                },
+            await stage.run(context)
+
+        elapsed = timer.elapsed()
+
+        final_papers = (
+            context.final_papers
+            or context.ranked_papers
+        )
+
+        tiers = self._partition_tiers(
+            final_papers
+        )
+
+        logger.info(
+            "Pipeline completed papers=%s elapsed=%ss",
+            len(final_papers),
+            elapsed,
+        )
+
+        return DiscoveryResult(
+            query=context.research_query,
+            highly_relevant=tiers[
+                PaperTier.HIGHLY_RELEVANT
+            ],
+            relevant_background=tiers[
+                PaperTier.RELEVANT_BACKGROUND
+            ],
+            adjacent_work=tiers[
+                PaperTier.ADJACENT_WORK
+            ],
+            historical_foundations=tiers[
+                PaperTier.HISTORICAL_FOUNDATIONS
+            ],
+            total_papers=len(
+                final_papers
+            ),
+            processing_time_seconds=elapsed,
+            metadata={
+                "raw_retrieved": len(
+                    context.raw_papers
+                ),
+                "after_dedup": len(
+                    context.deduplicated_papers
+                ),
+                "embedding_dimension": (
+                    self.services.embedder.dimension
+                ),
+            },
+        )
+
+    @staticmethod
+    def _partition_tiers(
+        papers: list[Paper],
+    ) -> dict:
+
+        tiers = {
+            PaperTier.HIGHLY_RELEVANT: [],
+            PaperTier.RELEVANT_BACKGROUND: [],
+            PaperTier.ADJACENT_WORK: [],
+            PaperTier.HISTORICAL_FOUNDATIONS: [],
+        }
+
+        for paper in papers:
+
+            tier = (
+                paper.tier
+                or PaperTier.ADJACENT_WORK
             )
 
-        except Exception as exc:
-            elapsed = timer.elapsed()
-            logger.error(f"Pipeline failed after {elapsed}s: {exc}")
-            logger.debug(traceback.format_exc())
-            raise
+            tiers[tier].append(
+                paper
+            )
+
+        return tiers
 
 
-# ---------------------------------------------------------------------------
-# Convenience function
-# ---------------------------------------------------------------------------
+async def discover(
+    research_idea: str,
+) -> DiscoveryResult:
 
-async def discover(research_idea: str, **kwargs) -> DiscoveryResult:
-    """Top-level convenience function."""
-    pipeline = ResearchDiscoveryPipeline(**kwargs)
-    return await pipeline.run(research_idea)
+    pipeline = (
+        ResearchDiscoveryPipeline()
+    )
+
+    return await pipeline.run(
+        research_idea
+    )

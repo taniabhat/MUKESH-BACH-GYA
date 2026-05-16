@@ -1,66 +1,189 @@
 # ============================================================
-# Research Discovery Module — Requirements
-# Fully open-source. No paid API dependencies.
+# Research Discovery Platform
+# Unified Runtime Requirements
 # ============================================================
 
-# --- Core web framework ---
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-pydantic>=2.6.0
-python-dotenv>=1.0.0
-
-# --- Async HTTP (API adapters, LLM calls) ---
-httpx>=0.27.0
-tenacity>=8.2.0
-aiofiles>=23.0.0
-
-# --- Deduplication ---
-rapidfuzz>=3.6.0
-
-# --- Embeddings (local BGE-M3 via sentence-transformers) ---
-# GPU: pip install torch --index-url https://download.pytorch.org/whl/cu121
-# CPU: pip install torch --index-url https://download.pytorch.org/whl/cpu
-sentence-transformers>=2.7.0
-numpy>=1.26.0
-
 # ============================================================
-# Optional: Full production stack
-# Uncomment when deploying beyond local dev
+# Core API Runtime
 # ============================================================
 
-# --- Vector database ---
-# qdrant-client>=1.9.0
-
-# --- Relational DB ---
-# sqlalchemy>=2.0.0
-# psycopg2-binary>=2.9.0
-
-# --- Task queue ---
-# celery>=5.3.0
-# redis>=5.0.0
-
-# --- Clustering (topic/gap analysis) ---
-# umap-learn>=0.5.0
-# hdbscan>=0.8.0
-
-# --- Reranker (BGE Reranker v2) ---
-# FlagEmbedding>=1.2.0
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29,<1.0
 
 # ============================================================
-# LLM Runtime (choose one)
+# Async Networking
 # ============================================================
 
-# Option A — Ollama client (local dev, easiest setup)
-# Install Ollama separately: https://ollama.com/download
-# Then: ollama pull qwen3:14b
-
-# Option B — vLLM (production, GPU server)
-# pip install vllm  (install separately, not via this file)
-# Start: vllm serve Qwen/Qwen3-14B --port 8080
+httpx>=0.27,<1.0
+aiofiles>=23,<24
 
 # ============================================================
-# NOT included (intentionally):
-# - anthropic         ← removed, was used for query expansion
-# - openai            ← not needed, all inference is local
-# - cohere            ← not needed
+# Validation / Configuration
+# ============================================================
+
+pydantic>=2.6,<3.0
+python-dotenv>=1.0,<2.0
+
+# ============================================================
+# Reliability / Retry Runtime
+# ============================================================
+
+tenacity>=8.2,<9.0
+
+# ============================================================
+# Deduplication
+# ============================================================
+
+rapidfuzz>=3.6,<4.0
+
+# ============================================================
+# Numerical Runtime
+# ============================================================
+
+numpy>=1.26,<3.0
+
+# ============================================================
+# Local Embedding Runtime (Optional but Recommended)
+# ============================================================
+
+# GPU:
+# pip install torch --index-url https://download.pytorch.org/whl/cu121
+#
+# CPU:
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+sentence-transformers>=2.7,<3.0
+
+# ============================================================
+# HuggingFace Inference Runtime
+# ============================================================
+
+huggingface-hub>=0.22,<1.0
+
+# ============================================================
+# OpenAI-Compatible Providers
+# Supports:
+# - OpenAI
+# - vLLM
+# - LM Studio
+# - TogetherAI
+# - Groq
+# - Any OpenAI-compatible gateway
+# ============================================================
+
+openai>=1.23,<2.0
+
+# ============================================================
+# Vector Database Runtime
+# ============================================================
+
+qdrant-client>=1.9,<2.0
+
+# ============================================================
+# SQL Persistence Runtime
+# ============================================================
+
+sqlalchemy>=2.0,<3.0
+psycopg2-binary>=2.9,<3.0
+
+# ============================================================
+# Worker Runtime
+# ============================================================
+
+celery>=5.3,<6.0
+redis>=5.0,<6.0
+
+# ============================================================
+# Topic / Gap Analysis
+# ============================================================
+
+umap-learn>=0.5,<1.0
+hdbscan>=0.8,<1.0
+
+# ============================================================
+# Advanced Reranking
+# ============================================================
+
+FlagEmbedding>=1.2,<2.0
+
+# ============================================================
+# Observability
+# ============================================================
+
+structlog>=24.1,<25.0
+prometheus-client>=0.20,<1.0
+
+# ============================================================
+# Development Tooling
+# ============================================================
+
+pytest>=8.0,<9.0
+pytest-asyncio>=0.23,<1.0
+pytest-cov>=4.1,<5.0
+
+black>=24.0,<25.0
+ruff>=0.3,<1.0
+
+mypy>=1.9,<2.0
+pre-commit>=3.7,<4.0
+
+# ============================================================
+# Notes
+# ============================================================
+
+# This platform supports:
+#
+# LLM Providers:
+# - Ollama
+# - vLLM
+# - HuggingFace Inference API
+# - OpenAI-compatible APIs
+# - LM Studio
+# - TogetherAI
+# - Groq
+#
+# Embedding Providers:
+# - sentence-transformers (local)
+# - HuggingFace Inference
+# - OpenAI-compatible embeddings
+#
+# Retrieval Providers:
+# - OpenAlex
+# - Semantic Scholar
+# - arXiv
+# - CrossRef
+#
+# Infrastructure:
+# - FastAPI gateway
+# - Async pipeline runtime
+# - Citation graph expansion
+# - Ranking engine
+# - Vector DB support
+# - Worker runtime
+# - Observability stack
+#
+# Recommended Install:
+#
+# pip install -r requirements.txt
+#
+# Optional GPU Torch:
+#
+# CUDA:
+# pip install torch --index-url https://download.pytorch.org/whl/cu121
+#
+# CPU:
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
+#
+# Optional vLLM:
+#
+# pip install vllm
+#
+# Recommended Production Stack:
+#
+# - PostgreSQL
+# - Qdrant
+# - Redis
+# - Celery
+# - Prometheus
+#
 # ============================================================

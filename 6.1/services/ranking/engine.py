@@ -1,17 +1,5 @@
 """
-Ranking Engine — Multi-signal paper relevance ranking.
-
-Combines five signals into a final composite score:
-1. Semantic similarity   (60%) — BGE-M3 cosine similarity to query
-2. Citation boost        (15%) — log-normalized citation count
-3. Recency boost         (10%) — year-based decay toward current year
-4. Venue score           (10%) — known high-impact venue bonus
-5. Keyword overlap       (5%)  — simple token overlap with query
-
-After initial ranking, applies MMR diversity reranking to prevent
-returning 50 nearly-identical papers.
-
-Papers are then assigned to one of four tiers based on final score.
+Multi-signal research paper ranking engine.
 """
 
 from __future__ import annotations
@@ -19,162 +7,229 @@ from __future__ import annotations
 import datetime
 import math
 import re
+from dataclasses import dataclass
 from typing import Optional
 
 from research_discovery.config.settings import settings
 from research_discovery.core.utils import get_logger
-from research_discovery.models.paper import Paper, PaperTier
-from research_discovery.services.embedding.service import EmbeddingService
+from research_discovery.models.paper import (
+    Paper,
+    PaperTier,
+    RankingFeatures,
+)
+from research_discovery.services.embedding.service import (
+    EmbeddingService,
+)
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Current year — used for recency scoring
-# ---------------------------------------------------------------------------
-_CURRENT_YEAR = datetime.datetime.utcnow().year
+CURRENT_YEAR = datetime.datetime.utcnow().year
+
+DEFAULT_MMR_LAMBDA = 0.7
+DEFAULT_MAX_PAPERS = 150
+
+GRAPH_BONUS_WEIGHT = 0.05
+
 
 # ---------------------------------------------------------------------------
-# High-impact venue list — case-insensitive substring matching
+# Venue Lists
 # ---------------------------------------------------------------------------
-_HIGH_IMPACT_VENUES = frozenset({
-    # ML / AI
-    "neurips", "nips", "icml", "iclr", "aaai", "ijcai",
-    # NLP
-    "acl", "emnlp", "naacl", "coling", "eacl",
-    # CV
+
+HIGH_IMPACT_VENUES = frozenset({
+    "neurips", "nips", "icml", "iclr",
+    "acl", "emnlp", "naacl",
     "cvpr", "iccv", "eccv",
-    # Systems / Engineering
-    "sosp", "osdi", "usenix", "sigcomm", "eurosys",
-    # Data
-    "sigmod", "vldb", "icde", "kdd", "www", "wsdm",
-    # Science
-    "nature", "science", "cell", "pnas", "plos",
-    # Robotics
-    "icra", "iros", "rss",
-    # IEEE
-    "ieee transactions", "tpami", "tnnls",
+    "nature", "science",
+    "kdd", "sigmod", "vldb",
 })
 
-_MEDIUM_IMPACT_VENUES = frozenset({
-    "workshop", "symposium", "conference", "acm", "springer", "arxiv",
-    "preprint", "journal", "review",
+MEDIUM_IMPACT_VENUES = frozenset({
+    "conference",
+    "workshop",
+    "symposium",
+    "journal",
+    "arxiv",
 })
 
 
 # ---------------------------------------------------------------------------
-# Individual scoring functions
+# Ranking Config
 # ---------------------------------------------------------------------------
 
-def _citation_score(citation_count: int) -> float:
-    """
-    Log-normalized citation score.
+@dataclass(frozen=True)
+class RankingWeights:
 
-    0 citations → 0.0
-    100 citations → ~0.67
-    1000 citations → ~1.0
-    Very high counts are capped at 1.0.
-
-    Uses log base 1000 so that 1000+ citations = max score.
-    """
-    if citation_count <= 0:
-        return 0.0
-    score = math.log(citation_count + 1) / math.log(1001)
-    return min(score, 1.0)
+    semantic_similarity: float
+    citation_boost: float
+    recency_boost: float
+    venue_score: float
+    keyword_overlap: float
 
 
-def _recency_score(year: Optional[int]) -> float:
-    """
-    Recency score based on publication year.
-
-    Current year → 1.0
-    5 years ago → 0.5
-    10+ years ago → 0.0
-
-    Unknown year → 0.3 (neutral, slightly penalized)
-    """
-    if year is None:
-        return 0.3
-
-    age = _CURRENT_YEAR - year
-    if age <= 0:
-        return 1.0
-    if age >= 10:
-        return 0.0
-
-    # Linear decay from 1.0 (age=0) to 0.0 (age=10)
-    return max(0.0, 1.0 - age / 10.0)
+DEFAULT_WEIGHTS = RankingWeights(
+    semantic_similarity=(
+        settings.ranking.semantic_similarity
+    ),
+    citation_boost=(
+        settings.ranking.citation_boost
+    ),
+    recency_boost=(
+        settings.ranking.recency_boost
+    ),
+    venue_score=(
+        settings.ranking.venue_score
+    ),
+    keyword_overlap=(
+        settings.ranking.keyword_overlap
+    ),
+)
 
 
-def _venue_score(venue: Optional[str]) -> float:
-    """
-    Venue impact score.
+# ---------------------------------------------------------------------------
+# Feature Scoring
+# ---------------------------------------------------------------------------
 
-    Top-tier venues (NeurIPS, ICML, ACL, etc.) → 1.0
-    Medium venues (workshops, symposia) → 0.5
-    Unknown venues → 0.2
-    No venue → 0.1
-    """
-    if not venue:
-        return 0.1
+class FeatureScorer:
+    """Computes bounded ranking features."""
 
-    venue_lower = venue.lower()
+    @staticmethod
+    def citation_score(
+        citation_count: int,
+    ) -> float:
 
-    for v in _HIGH_IMPACT_VENUES:
-        if v in venue_lower:
+        if citation_count <= 0:
+            return 0.0
+
+        score = (
+            math.log(citation_count + 1)
+            / math.log(1001)
+        )
+
+        return min(score, 1.0)
+
+    @staticmethod
+    def recency_score(
+        year: Optional[int],
+    ) -> float:
+
+        if year is None:
+            return 0.3
+
+        age = CURRENT_YEAR - year
+
+        if age <= 0:
             return 1.0
 
-    for v in _MEDIUM_IMPACT_VENUES:
-        if v in venue_lower:
-            return 0.5
+        if age >= 10:
+            return 0.0
 
-    return 0.2
+        return max(
+            0.0,
+            1.0 - age / 10.0,
+        )
 
+    @staticmethod
+    def venue_score(
+        venue: Optional[str],
+    ) -> float:
 
-def _keyword_overlap(paper: Paper, query: str) -> float:
-    """
-    Token overlap between query and paper (title + abstract).
+        if not venue:
+            return 0.1
 
-    Counts how many distinct query tokens appear in the paper content.
-    Normalized by number of query tokens.
-    Returns 0.0–1.0.
-    """
-    def tokenize(text: str) -> set[str]:
-        return set(re.findall(r"\b[a-z]{3,}\b", text.lower()))
+        lowered = venue.lower()
 
-    query_tokens = tokenize(query)
-    if not query_tokens:
-        return 0.0
+        for candidate in (
+            HIGH_IMPACT_VENUES
+        ):
 
-    content = paper.title
-    if paper.abstract:
-        content += " " + paper.abstract
+            if candidate in lowered:
+                return 1.0
 
-    paper_tokens = tokenize(content)
-    overlap = query_tokens & paper_tokens
-    return len(overlap) / len(query_tokens)
+        for candidate in (
+            MEDIUM_IMPACT_VENUES
+        ):
+
+            if candidate in lowered:
+                return 0.5
+
+        return 0.2
+
+    @staticmethod
+    def keyword_overlap(
+        paper: Paper,
+        query_tokens: set[str],
+    ) -> float:
+
+        if not query_tokens:
+            return 0.0
+
+        content = paper.title
+
+        if paper.abstract:
+            content += (
+                " "
+                + paper.abstract
+            )
+
+        paper_tokens = (
+            FeatureScorer.tokenize(
+                content
+            )
+        )
+
+        overlap = (
+            query_tokens
+            & paper_tokens
+        )
+
+        return (
+            len(overlap)
+            / len(query_tokens)
+        )
+
+    @staticmethod
+    def tokenize(
+        text: str,
+    ) -> set[str]:
+
+        return set(
+            re.findall(
+                r"\b[a-z]{3,}\b",
+                text.lower(),
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
-# Tier thresholds
+# Tier Assignment
 # ---------------------------------------------------------------------------
 
-_TIER_THRESHOLDS = {
-    PaperTier.HIGHLY_RELEVANT: 0.75,
-    PaperTier.RELEVANT_BACKGROUND: 0.55,
-    PaperTier.ADJACENT_WORK: 0.35,
-    PaperTier.HISTORICAL_FOUNDATIONS: 0.0,
-}
+class TierAssigner:
+    """Assigns semantic paper tiers."""
 
+    THRESHOLDS = {
+        PaperTier.HIGHLY_RELEVANT: 0.75,
+        PaperTier.RELEVANT_BACKGROUND: 0.55,
+        PaperTier.ADJACENT_WORK: 0.35,
+        PaperTier.HISTORICAL_FOUNDATIONS: 0.0,
+    }
 
-def _assign_tier(score: float) -> str:
-    """Assign a PaperTier string based on the final composite score."""
-    if score >= _TIER_THRESHOLDS[PaperTier.HIGHLY_RELEVANT]:
-        return PaperTier.HIGHLY_RELEVANT
-    if score >= _TIER_THRESHOLDS[PaperTier.RELEVANT_BACKGROUND]:
-        return PaperTier.RELEVANT_BACKGROUND
-    if score >= _TIER_THRESHOLDS[PaperTier.ADJACENT_WORK]:
-        return PaperTier.ADJACENT_WORK
-    return PaperTier.HISTORICAL_FOUNDATIONS
+    @classmethod
+    def assign(
+        cls,
+        score: float,
+    ) -> PaperTier:
+
+        for tier, threshold in (
+            cls.THRESHOLDS.items()
+        ):
+
+            if score >= threshold:
+                return tier
+
+        return (
+            PaperTier.HISTORICAL_FOUNDATIONS
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -183,72 +238,27 @@ def _assign_tier(score: float) -> str:
 
 class RankingEngine:
     """
-    Multi-signal ranking engine for academic papers.
-
-    Pipeline:
-    1. Compute composite score per paper (5 signals, weighted)
-    2. Sort descending by composite score
-    3. Apply MMR diversity reranking on top-K
-    4. Assign tier labels
-    5. Apply citation graph centrality bonus (if available)
-    6. Truncate to max_papers
+    Multi-signal ranking pipeline.
     """
 
     def __init__(
         self,
-        mmr_lambda: float = 0.7,
-        max_papers: int = 150,
-        weights: Optional[dict] = None,
+        mmr_lambda: float = DEFAULT_MMR_LAMBDA,
+        max_papers: int = DEFAULT_MAX_PAPERS,
+        weights: RankingWeights = (
+            DEFAULT_WEIGHTS
+        ),
     ):
+
         self.mmr_lambda = mmr_lambda
+
         self.max_papers = max_papers
 
-        # Load weights from config or use provided override
-        cfg = settings.ranking
-        self.weights = weights or {
-            "semantic_similarity": cfg.semantic_similarity,
-            "citation_boost":      cfg.citation_boost,
-            "recency_boost":       cfg.recency_boost,
-            "venue_score":         cfg.venue_score,
-            "keyword_overlap":     cfg.keyword_overlap,
-        }
+        self.weights = weights
 
-        self._embedder = EmbeddingService()
-
-    def _composite_score(self, paper: Paper, query: str) -> float:
-        """
-        Compute the weighted composite relevance score for a single paper.
-
-        Each component is independently bounded [0, 1].
-        Weighted sum gives a final score in [0, 1].
-        """
-        sem_sim  = paper.ranking_features.semantic_similarity
-        cite     = _citation_score(paper.citation_count)
-        recency  = _recency_score(paper.year)
-        venue    = _venue_score(paper.venue)
-        kw       = _keyword_overlap(paper, query)
-        graph    = paper.ranking_features.graph_centrality  # 0 if not set
-
-        # Store individual components for transparency
-        paper.ranking_features.citation_boost = round(cite, 4)
-        paper.ranking_features.recency_boost = round(recency, 4)
-        paper.ranking_features.venue_score = round(venue, 4)
-        paper.ranking_features.keyword_overlap = round(kw, 4)
-
-        # Weighted composite
-        score = (
-            self.weights["semantic_similarity"] * sem_sim
-            + self.weights["citation_boost"]      * cite
-            + self.weights["recency_boost"]        * recency
-            + self.weights["venue_score"]          * venue
-            + self.weights["keyword_overlap"]      * kw
+        self._embedder = (
+            EmbeddingService()
         )
-
-        # Small graph centrality bonus (additive, capped)
-        if graph > 0:
-            score = min(1.0, score + 0.05 * graph)
-
-        return round(score, 6)
 
     def rank(
         self,
@@ -256,59 +266,197 @@ class RankingEngine:
         query: str,
         query_embedding: list[float],
     ) -> list[Paper]:
-        """
-        Full ranking pipeline.
 
-        Args:
-            papers:          List of papers with embeddings + similarity scores set
-            query:           Original research idea string (for keyword overlap)
-            query_embedding: Query embedding vector (for MMR)
-
-        Returns:
-            Sorted, tiered, MMR-reranked list of papers (max_papers).
-        """
         if not papers:
             return []
 
-        logger.info(f"Ranking {len(papers)} papers...")
-
-        # Step 1 — Compute composite scores
-        for paper in papers:
-            paper.final_score = self._composite_score(paper, query)
-
-        # Step 2 — Sort by composite score descending
-        papers.sort(key=lambda p: p.final_score, reverse=True)
-
-        # Step 3 — MMR diversity reranking on top candidates
-        # Only rerank the top pool (2x max_papers) to avoid O(n²) cost
-        mmr_pool_size = min(len(papers), self.max_papers * 2)
-        pool = papers[:mmr_pool_size]
-        remainder = papers[mmr_pool_size:]
-
-        reranked = self._embedder.mmr_rerank(
-            pool,
-            query_embedding,
-            top_k=min(self.max_papers, len(pool)),
-            lambda_=self.mmr_lambda,
-        )
-
-        # Append remainder (already sorted, below threshold)
-        # but only up to max_papers total
-        final = reranked
-        if len(final) < self.max_papers:
-            slots = self.max_papers - len(final)
-            final = final + remainder[:slots]
-
-        # Step 4 — Assign tiers
-        for paper in final:
-            paper.tier = _assign_tier(paper.final_score)
-
-        tier_counts = {}
-        for p in final:
-            tier_counts[p.tier] = tier_counts.get(p.tier, 0) + 1
         logger.info(
-            f"Ranking complete: {len(final)} papers | "
-            f"tiers: {tier_counts}"
+            "Ranking papers count=%s",
+            len(papers),
         )
 
-        return final[:self.max_papers]
+        query_tokens = (
+            FeatureScorer.tokenize(
+                query
+            )
+        )
+
+        for paper in papers:
+
+            features = (
+                self._compute_features(
+                    paper=paper,
+                    query_tokens=(
+                        query_tokens
+                    ),
+                )
+            )
+
+            paper.ranking_features = (
+                features
+            )
+
+            paper.final_score = (
+                self._compute_final_score(
+                    features
+                )
+            )
+
+        papers.sort(
+            key=lambda paper: (
+                paper.final_score
+            ),
+            reverse=True,
+        )
+
+        papers = (
+            self._apply_mmr_reranking(
+                papers,
+                query_embedding,
+            )
+        )
+
+        for paper in papers:
+
+            paper.tier = (
+                TierAssigner.assign(
+                    paper.final_score
+                )
+            )
+
+        logger.info(
+            "Ranking complete output=%s",
+            len(papers),
+        )
+
+        return papers[: self.max_papers]
+
+    def _compute_features(
+        self,
+        paper: Paper,
+        query_tokens: set[str],
+    ) -> RankingFeatures:
+
+        return RankingFeatures(
+            semantic_similarity=round(
+                paper.ranking_features.semantic_similarity,
+                4,
+            ),
+            citation_boost=round(
+                FeatureScorer.citation_score(
+                    paper.citation_count
+                ),
+                4,
+            ),
+            recency_boost=round(
+                FeatureScorer.recency_score(
+                    paper.year
+                ),
+                4,
+            ),
+            venue_score=round(
+                FeatureScorer.venue_score(
+                    paper.venue
+                ),
+                4,
+            ),
+            keyword_overlap=round(
+                FeatureScorer.keyword_overlap(
+                    paper,
+                    query_tokens,
+                ),
+                4,
+            ),
+            graph_centrality=round(
+                paper.ranking_features.graph_centrality,
+                4,
+            ),
+            mmr_score=round(
+                paper.ranking_features.mmr_score,
+                4,
+            ),
+        )
+
+    def _compute_final_score(
+        self,
+        features: RankingFeatures,
+    ) -> float:
+
+        score = (
+            self.weights.semantic_similarity
+            * features.semantic_similarity
+            + self.weights.citation_boost
+            * features.citation_boost
+            + self.weights.recency_boost
+            * features.recency_boost
+            + self.weights.venue_score
+            * features.venue_score
+            + self.weights.keyword_overlap
+            * features.keyword_overlap
+        )
+
+        if features.graph_centrality > 0:
+
+            score += (
+                GRAPH_BONUS_WEIGHT
+                * features.graph_centrality
+            )
+
+        return round(
+            min(score, 1.0),
+            6,
+        )
+
+    def _apply_mmr_reranking(
+        self,
+        papers: list[Paper],
+        query_embedding: list[float],
+    ) -> list[Paper]:
+
+        rerank_pool_size = min(
+            len(papers),
+            self.max_papers * 2,
+        )
+
+        rerank_pool = papers[
+            :rerank_pool_size
+        ]
+
+        remaining = papers[
+            rerank_pool_size:
+        ]
+
+        eligible = [
+            paper
+            for paper in rerank_pool
+            if paper.embedding
+        ]
+
+        reranked = (
+            self._embedder.mmr_rerank(
+                papers=eligible,
+                query_embedding=(
+                    query_embedding
+                ),
+                top_k=min(
+                    self.max_papers,
+                    len(eligible),
+                ),
+                lambda_=self.mmr_lambda,
+            )
+        )
+
+        final = reranked
+
+        if len(final) < self.max_papers:
+
+            slots = (
+                self.max_papers
+                - len(final)
+            )
+
+            final.extend(
+                remaining[:slots]
+            )
+
+        return final

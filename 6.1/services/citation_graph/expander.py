@@ -1,11 +1,5 @@
 """
-Citation Graph Expansion.
-
-Takes the top-K papers from initial ranking and expands the corpus
-by fetching their references and citing papers.
-
-Then scores graph centrality using a simple PageRank implementation
-to identify seminal / bridge papers.
+Citation graph expansion and graph centrality scoring.
 """
 
 from __future__ import annotations
@@ -14,176 +8,387 @@ import asyncio
 from collections import defaultdict
 from typing import Optional
 
-from research_discovery.config.settings import settings
 from research_discovery.core.utils import get_logger
-from research_discovery.models.paper import CitationEdge, CitationRelation, Paper, PaperSource
-from research_discovery.services.retrieval.openalex import OpenAlexAdapter
-from research_discovery.services.retrieval.semantic_scholar import SemanticScholarAdapter
+from research_discovery.models.paper import (
+    CitationEdge,
+    CitationRelation,
+    Paper,
+    PaperReference,
+    PaperSource,
+    RankingFeatures,
+)
+from research_discovery.services.retrieval.openalex import (
+    OpenAlexAdapter,
+)
 
 logger = get_logger(__name__)
 
+DEFAULT_TOP_K = 20
+DEFAULT_MAX_EXPANSION = 30
+DEFAULT_CONCURRENCY = 5
 
-# ---------------------------------------------------------------------------
-# Lightweight PageRank
-# ---------------------------------------------------------------------------
-
-def _pagerank(
-    edges: list[tuple[str, str]],
-    paper_ids: set[str],
-    damping: float = 0.85,
-    iterations: int = 30,
-) -> dict[str, float]:
-    """
-    Simple iterative PageRank.
-
-    Args:
-        edges: list of (source_id, target_id) — source cites target
-        paper_ids: all node IDs
-        damping: damping factor (standard 0.85)
-        iterations: convergence iterations
-    """
-    n = len(paper_ids)
-    if n == 0:
-        return {}
-
-    # Initialize
-    rank: dict[str, float] = {pid: 1.0 / n for pid in paper_ids}
-
-    # Build adjacency (out-edges)
-    out_edges: dict[str, list[str]] = defaultdict(list)
-    in_edges: dict[str, list[str]] = defaultdict(list)
-    for src, tgt in edges:
-        out_edges[src].append(tgt)
-        in_edges[tgt].append(src)
-
-    out_degree = {pid: len(out_edges[pid]) for pid in paper_ids}
-
-    for _ in range(iterations):
-        new_rank: dict[str, float] = {}
-        for pid in paper_ids:
-            incoming_sum = sum(
-                rank[src] / (out_degree[src] or 1)
-                for src in in_edges[pid]
-                if src in rank
-            )
-            new_rank[pid] = (1 - damping) / n + damping * incoming_sum
-        rank = new_rank
-
-    # Normalize to [0, 1]
-    max_rank = max(rank.values()) if rank else 1.0
-    return {pid: r / max_rank for pid, r in rank.items()}
+PAGERANK_DAMPING = 0.85
+PAGERANK_ITERATIONS = 30
 
 
 # ---------------------------------------------------------------------------
-# Citation Graph Builder
+# Graph Algorithms
+# ---------------------------------------------------------------------------
+
+class PageRankCalculator:
+    """Lightweight iterative PageRank."""
+
+    @staticmethod
+    def compute(
+        edges: list[tuple[str, str]],
+        paper_ids: set[str],
+        damping: float = PAGERANK_DAMPING,
+        iterations: int = PAGERANK_ITERATIONS,
+    ) -> dict[str, float]:
+
+        if not paper_ids:
+            return {}
+
+        node_count = len(paper_ids)
+
+        ranks = {
+            paper_id: 1.0 / node_count
+            for paper_id in paper_ids
+        }
+
+        outgoing = defaultdict(list)
+        incoming = defaultdict(list)
+
+        for source, target in edges:
+            outgoing[source].append(target)
+            incoming[target].append(source)
+
+        out_degree = {
+            paper_id: len(outgoing[paper_id])
+            for paper_id in paper_ids
+        }
+
+        for _ in range(iterations):
+
+            updated_ranks = {}
+
+            for paper_id in paper_ids:
+
+                incoming_score = sum(
+                    ranks[source]
+                    / (out_degree[source] or 1)
+                    for source in incoming[paper_id]
+                    if source in ranks
+                )
+
+                updated_ranks[paper_id] = (
+                    (1 - damping) / node_count
+                    + damping * incoming_score
+                )
+
+            ranks = updated_ranks
+
+        return PageRankCalculator._normalize(
+            ranks
+        )
+
+    @staticmethod
+    def _normalize(
+        ranks: dict[str, float],
+    ) -> dict[str, float]:
+
+        if not ranks:
+            return {}
+
+        max_rank = max(ranks.values())
+
+        if max_rank == 0:
+            return ranks
+
+        return {
+            paper_id: score / max_rank
+            for paper_id, score in ranks.items()
+        }
+
+
+# ---------------------------------------------------------------------------
+# Citation Expansion
 # ---------------------------------------------------------------------------
 
 class CitationGraphExpander:
     """
-    Expands the initial paper set by following citation links.
-    Uses OpenAlex as the primary citation graph source.
+    Expands papers through citation traversal.
     """
 
-    def __init__(self, top_k: int = 20, max_expansion_per_paper: int = 30):
+    def __init__(
+        self,
+        top_k: int = DEFAULT_TOP_K,
+        max_expansion_per_paper: int = DEFAULT_MAX_EXPANSION,
+        concurrency_limit: int = DEFAULT_CONCURRENCY,
+    ):
+
         self.top_k = top_k
-        self.max_expansion_per_paper = max_expansion_per_paper
+
+        self.max_expansion_per_paper = (
+            max_expansion_per_paper
+        )
+
+        self.concurrency_limit = (
+            concurrency_limit
+        )
+
         self._openalex = OpenAlexAdapter()
 
-    async def _expand_paper(self, paper: Paper) -> list[Paper]:
-        """Fetch citations and references for a single paper."""
-        openalex_id = paper.external_ids.openalex
-        if not openalex_id:
-            return []
+    async def expand(
+        self,
+        papers: list[Paper],
+    ) -> tuple[list[Paper], list[CitationEdge]]:
+
+        seed_papers = papers[: self.top_k]
+
+        logger.info(
+            "Citation expansion starting seed_count=%s",
+            len(seed_papers),
+        )
+
+        semaphore = asyncio.Semaphore(
+            self.concurrency_limit
+        )
+
+        async def expand_seed(
+            paper: Paper,
+        ) -> tuple[list[Paper], list[CitationEdge]]:
+
+            async with semaphore:
+                return await self._expand_seed_paper(
+                    paper
+                )
 
         tasks = [
-            self._openalex.fetch_citations(openalex_id),
-            self._openalex.fetch_references(openalex_id),
+            expand_seed(paper)
+            for paper in seed_papers
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        expanded: list[Paper] = []
-        for r in results:
-            if isinstance(r, list):
-                expanded.extend(r[:self.max_expansion_per_paper])
-
-        return expanded
-
-    async def expand(self, papers: list[Paper]) -> tuple[list[Paper], list[CitationEdge]]:
-        """
-        Takes top-K ranked papers, expands via citation graph.
-
-        Returns:
-            (all_papers, citation_edges)
-            all_papers = original + expansion papers
-            citation_edges = graph edges for PageRank
-        """
-        seed_papers = papers[: self.top_k]
-        logger.info(f"Citation expansion: starting from {len(seed_papers)} seed papers")
-
-        # Fan out — fetch citations/references for all seed papers concurrently
-        # Use semaphore to avoid hammering the API
-        semaphore = asyncio.Semaphore(5)
-
-        async def _expand_with_sem(paper: Paper) -> list[Paper]:
-            async with semaphore:
-                return await self._expand_paper(paper)
-
-        tasks = [_expand_with_sem(p) for p in seed_papers]
-        expansion_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        all_new: list[Paper] = []
-        for r in expansion_results:
-            if isinstance(r, list):
-                all_new.extend(r)
-
-        logger.info(f"Citation expansion: fetched {len(all_new)} candidate papers")
-
-        # Build citation edges for PageRank
-        edges: list[CitationEdge] = []
-        existing_ids = {p.paper_id for p in papers}
-
-        for seed, new_papers in zip(seed_papers, expansion_results):
-            if not isinstance(new_papers, list):
-                continue
-            for new_p in new_papers:
-                if new_p.source == PaperSource.CITATION_EXPANSION:
-                    # seed → new_p means seed cites new_p
-                    edges.append(CitationEdge(
-                        source_paper_id=seed.paper_id,
-                        target_paper_id=new_p.paper_id,
-                        relation=CitationRelation.CITES,
-                    ))
-
-        combined = papers + all_new
-        logger.info(
-            f"Citation expansion: {len(papers)} → {len(combined)} papers, "
-            f"{len(edges)} citation edges"
+        results = await asyncio.gather(
+            *tasks,
+            return_exceptions=True,
         )
-        return combined, edges
+
+        expanded_papers = []
+        edges = []
+
+        for result in results:
+
+            if not isinstance(result, tuple):
+                continue
+
+            papers_batch, edge_batch = result
+
+            expanded_papers.extend(papers_batch)
+            edges.extend(edge_batch)
+
+        combined_papers = self._deduplicate_papers(
+            papers + expanded_papers
+        )
+
+        logger.info(
+            "Citation expansion complete "
+            "original=%s expanded=%s edges=%s",
+            len(papers),
+            len(combined_papers),
+            len(edges),
+        )
+
+        return combined_papers, edges
+
+    async def _expand_seed_paper(
+        self,
+        paper: Paper,
+    ) -> tuple[list[Paper], list[CitationEdge]]:
+
+        openalex_id = (
+            paper.external_ids.openalex
+        )
+
+        if not openalex_id:
+            return [], []
+
+        citation_task = (
+            self._openalex.fetch_citations(
+                openalex_id
+            )
+        )
+
+        reference_task = (
+            self._openalex.fetch_references(
+                openalex_id
+            )
+        )
+
+        citation_results, reference_results = (
+            await asyncio.gather(
+                citation_task,
+                reference_task,
+                return_exceptions=True,
+            )
+        )
+
+        expanded_papers = []
+        edges = []
+
+        if isinstance(citation_results, list):
+
+            citation_results = (
+                citation_results[
+                    : self.max_expansion_per_paper
+                ]
+            )
+
+            expanded_papers.extend(
+                citation_results
+            )
+
+            for cited_by_paper in citation_results:
+
+                edges.append(
+                    CitationEdge(
+                        source_paper_id=(
+                            cited_by_paper.paper_id
+                        ),
+                        target_paper_id=(
+                            paper.paper_id
+                        ),
+                        relation=(
+                            CitationRelation.CITES
+                        ),
+                    )
+                )
+
+        if isinstance(reference_results, list):
+
+            reference_results = (
+                reference_results[
+                    : self.max_expansion_per_paper
+                ]
+            )
+
+            expanded_papers.extend(
+                reference_results
+            )
+
+            for referenced_paper in (
+                reference_results
+            ):
+
+                edges.append(
+                    CitationEdge(
+                        source_paper_id=(
+                            paper.paper_id
+                        ),
+                        target_paper_id=(
+                            referenced_paper.paper_id
+                        ),
+                        relation=(
+                            CitationRelation.CITES
+                        ),
+                    )
+                )
+
+        return expanded_papers, edges
 
     def apply_graph_scores(
         self,
         papers: list[Paper],
         edges: list[CitationEdge],
     ) -> list[Paper]:
-        """
-        Run PageRank on the citation graph and store centrality
-        in paper.ranking_features.graph_centrality.
-        """
-        paper_map = {p.paper_id: p for p in papers}
-        paper_ids = set(paper_map.keys())
 
-        edge_tuples = [
-            (e.source_paper_id, e.target_paper_id)
-            for e in edges
-            if e.source_paper_id in paper_ids and e.target_paper_id in paper_ids
+        paper_map = {
+            paper.paper_id: paper
+            for paper in papers
+        }
+
+        edge_pairs = [
+            (
+                edge.source_paper_id,
+                edge.target_paper_id,
+            )
+            for edge in edges
+            if (
+                edge.source_paper_id
+                in paper_map
+                and edge.target_paper_id
+                in paper_map
+            )
         ]
 
-        pr = _pagerank(edge_tuples, paper_ids)
+        scores = PageRankCalculator.compute(
+            edges=edge_pairs,
+            paper_ids=set(paper_map.keys()),
+        )
 
-        for pid, score in pr.items():
-            if pid in paper_map:
-                paper_map[pid].ranking_features.graph_centrality = round(score, 4)
+        for paper_id, score in scores.items():
 
-        logger.info(f"PageRank computed for {len(pr)} papers")
+            paper = paper_map.get(paper_id)
+
+            if not paper:
+                continue
+
+            paper.ranking_features = (
+                RankingFeatures(
+                    semantic_similarity=(
+                        paper.ranking_features.semantic_similarity
+                    ),
+                    citation_boost=(
+                        paper.ranking_features.citation_boost
+                    ),
+                    recency_boost=(
+                        paper.ranking_features.recency_boost
+                    ),
+                    venue_score=(
+                        paper.ranking_features.venue_score
+                    ),
+                    keyword_overlap=(
+                        paper.ranking_features.keyword_overlap
+                    ),
+                    graph_centrality=round(
+                        score,
+                        4,
+                    ),
+                    mmr_score=(
+                        paper.ranking_features.mmr_score
+                    ),
+                )
+            )
+
+        logger.info(
+            "PageRank completed nodes=%s",
+            len(scores),
+        )
+
         return papers
+
+    @staticmethod
+    def _deduplicate_papers(
+        papers: list[Paper],
+    ) -> list[Paper]:
+
+        seen = set()
+
+        deduplicated = []
+
+        for paper in papers:
+
+            identity = (
+                paper.external_ids.doi
+                or paper.external_ids.openalex
+                or paper.title.lower()
+            )
+
+            if identity in seen:
+                continue
+
+            seen.add(identity)
+
+            deduplicated.append(paper)
+
+        return deduplicated

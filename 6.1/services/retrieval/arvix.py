@@ -1,6 +1,5 @@
 """
-arXiv API Adapter — Freshest preprints, essential for fast-moving AI domains.
-Uses the Atom feed API (no auth required).
+arXiv API Adapter — Fetches research papers using the Atom feed API.
 """
 
 from __future__ import annotations
@@ -24,97 +23,15 @@ logger = get_logger(__name__)
 
 BASE_URL = settings.api.arxiv_base_url
 
-# arXiv Atom feed namespaces
-NS = {
-    "atom": "http://www.w3.org/2005/Atom",
-    "arxiv": "http://arxiv.org/schemas/atom",
-}
+ATOM_NS = "http://www.w3.org/2005/Atom"
+ARXIV_NS = "http://arxiv.org/schemas/atom"
+OPENSEARCH_NS = "http://a9.com/-/spec/opensearch/1.1/"
 
-
-def _text(element, tag: str, ns: Optional[str] = "atom") -> str:
-    prefix = f"{{{NS[ns]}}}" if ns else ""
-    child = element.find(f"{prefix}{tag}")
-    return child.text.strip() if child is not None and child.text else ""
-
-
-def _parse_entry(entry: ET.Element, query: str) -> Optional[Paper]:
-    try:
-        title = _text(entry, "title").replace("\n", " ").strip()
-        if not title:
-            return None
-
-        abstract = _text(entry, "summary").replace("\n", " ").strip()
-
-        # arXiv ID from <id> URL like http://arxiv.org/abs/2401.12345v1
-        raw_id = _text(entry, "id")
-        arxiv_match = re.search(r"arxiv\.org/abs/([^\s]+)", raw_id)
-        arxiv_id = arxiv_match.group(1) if arxiv_match else None
-        if arxiv_id:
-            # Strip version suffix
-            arxiv_id = re.sub(r"v\d+$", "", arxiv_id)
-
-        # Authors
-        authors = []
-        for author_el in entry.findall(f"{{{NS['atom']}}}author"):
-            name_el = author_el.find(f"{{{NS['atom']}}}name")
-            if name_el is not None and name_el.text:
-                authors.append(Author(name=name_el.text.strip()))
-
-        # Published date
-        published = _text(entry, "published")
-        year = None
-        if published:
-            m = re.match(r"(\d{4})", published)
-            if m:
-                year = int(m.group(1))
-
-        # DOI (sometimes present in arxiv:doi)
-        doi_el = entry.find(f"{{{NS['arxiv']}}}doi")
-        doi = doi_el.text.strip() if doi_el is not None and doi_el.text else None
-
-        # Category → fields of study
-        fields = []
-        for cat in entry.findall(f"{{{NS['atom']}}}category"):
-            term = cat.get("term", "")
-            if term:
-                fields.append(term)
-
-        pdf_url = None
-        landing_url = None
-        for link in entry.findall(f"{{{NS['atom']}}}link"):
-            rel = link.get("rel", "")
-            href = link.get("href", "")
-            if link.get("type") == "application/pdf":
-                pdf_url = href
-            elif rel == "alternate":
-                landing_url = href
-
-        if arxiv_id and not landing_url:
-            landing_url = f"https://arxiv.org/abs/{arxiv_id}"
-        if arxiv_id and not pdf_url:
-            pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
-
-        return Paper(
-            source=PaperSource.ARXIV,
-            external_ids=ExternalIDs(doi=doi, arxiv=arxiv_id),
-            title=title,
-            abstract=abstract,
-            authors=authors,
-            year=year,
-            publication_date=published[:10] if published else None,
-            fields_of_study=fields[:10],
-            pdf_url=pdf_url,
-            landing_page_url=landing_url,
-            is_open_access=True,  # arXiv is always OA
-            retrieved_from_queries=[query],
-        )
-    except Exception as exc:
-        logger.debug(f"arXiv parse error: {exc}")
-        return None
+MAX_FIELDS_OF_STUDY = 10
 
 
 class ArxivAdapter:
-    """Fetches papers from arXiv via the Atom feed API."""
+    """Adapter for fetching papers from arXiv."""
 
     async def search(
         self,
@@ -122,53 +39,39 @@ class ArxivAdapter:
         max_results: int = 20,
         sort_by: str = "relevance",
     ) -> SearchResult:
-        """
-        Args:
-            query: search query
-            max_results: max papers to fetch
-            sort_by: relevance | lastUpdatedDate | submittedDate
-        """
-        params = {
-            "search_query": f"all:{urllib.parse.quote(query)}",
-            "max_results": max_results,
-            "sortBy": sort_by,
-            "sortOrder": "descending",
-        }
-        url = BASE_URL + "?" + "&".join(f"{k}={v}" for k, v in params.items())
-
-        papers: list[Paper] = []
 
         try:
-            async with get_http_client(
-                timeout=settings.api.http_timeout,
-                headers={"Accept": "application/atom+xml"},
-            ) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                xml_text = resp.text
+            xml_text = await self._fetch_results(
+                query=query,
+                max_results=max_results,
+                sort_by=sort_by,
+            )
 
-            root = ET.fromstring(xml_text)
-            entries = root.findall(f"{{{NS['atom']}}}entry")
+            papers, total_found = self._parse_response(
+                xml_text=xml_text,
+                query=query,
+            )
 
-            for entry in entries:
-                p = _parse_entry(entry, query)
-                if p:
-                    papers.append(p)
+            logger.info(
+                "arXiv query='%s' fetched=%s total=%s",
+                query,
+                len(papers),
+                total_found,
+            )
 
-            # Extract total from opensearch:totalResults if present
-            total_el = root.find("{http://a9.com/-/spec/opensearch/1.1/}totalResults")
-            total = int(total_el.text) if total_el is not None and total_el.text else len(papers)
-
-            logger.info(f"arXiv '{query}': {len(papers)}/{total} papers")
             return SearchResult(
                 source=PaperSource.ARXIV,
                 query=query,
                 papers=papers,
-                total_found=total,
+                total_found=total_found,
             )
 
         except Exception as exc:
-            logger.error(f"arXiv search error for '{query}': {exc}")
+            logger.exception(
+                "arXiv search failed for query='%s'",
+                query,
+            )
+
             return SearchResult(
                 source=PaperSource.ARXIV,
                 query=query,
@@ -176,3 +79,318 @@ class ArxivAdapter:
                 total_found=0,
                 error=str(exc),
             )
+
+    async def _fetch_results(
+        self,
+        query: str,
+        max_results: int,
+        sort_by: str,
+    ) -> str:
+
+        params = {
+            "search_query": f"all:{query}",
+            "max_results": max_results,
+            "sortBy": sort_by,
+            "sortOrder": "descending",
+        }
+
+        url = (
+            f"{BASE_URL}?"
+            f"{urllib.parse.urlencode(params)}"
+        )
+
+        async with get_http_client(
+            timeout=settings.api.http_timeout,
+            headers={"Accept": "application/atom+xml"},
+        ) as client:
+
+            response = await client.get(url)
+            response.raise_for_status()
+
+            return response.text
+
+    def _parse_response(
+        self,
+        xml_text: str,
+        query: str,
+    ) -> tuple[list[Paper], int]:
+
+        root = ET.fromstring(xml_text)
+
+        entries = root.findall(
+            f"{{{ATOM_NS}}}entry"
+        )
+
+        papers: list[Paper] = []
+
+        for entry in entries:
+            try:
+                paper = self._parse_entry(
+                    entry=entry,
+                    query=query,
+                )
+
+                if paper:
+                    papers.append(paper)
+
+            except Exception:
+                logger.exception(
+                    "Failed to parse arXiv entry"
+                )
+
+        total_found = self._extract_total_results(root)
+
+        return papers, total_found
+
+    def _parse_entry(
+        self,
+        entry: ET.Element,
+        query: str,
+    ) -> Optional[Paper]:
+
+        title = self._clean_text(
+            self._get_text(entry, "title")
+        )
+
+        if not title:
+            return None
+
+        abstract = self._clean_text(
+            self._get_text(entry, "summary")
+        )
+
+        arxiv_id = self._extract_arxiv_id(entry)
+
+        publication_date = self._get_text(
+            entry,
+            "published",
+        )
+
+        year = self._extract_year(
+            publication_date
+        )
+
+        doi = self._extract_doi(entry)
+
+        authors = self._extract_authors(entry)
+
+        fields_of_study = self._extract_fields(entry)
+
+        pdf_url, landing_page_url = (
+            self._extract_urls(
+                entry,
+                arxiv_id,
+            )
+        )
+
+        return Paper(
+            source=PaperSource.ARXIV,
+            external_ids=ExternalIDs(
+                doi=doi,
+                arxiv=arxiv_id,
+            ),
+            title=title,
+            abstract=abstract,
+            authors=authors,
+            year=year,
+            publication_date=(
+                publication_date[:10]
+                if publication_date
+                else None
+            ),
+            fields_of_study=(
+                fields_of_study[:MAX_FIELDS_OF_STUDY]
+            ),
+            pdf_url=pdf_url,
+            landing_page_url=landing_page_url,
+            is_open_access=True,
+            retrieved_from_queries=[query],
+        )
+
+    def _get_text(
+        self,
+        element: ET.Element,
+        tag: str,
+        namespace: str = ATOM_NS,
+    ) -> str:
+
+        child = element.find(
+            f"{{{namespace}}}{tag}"
+        )
+
+        if child is None or not child.text:
+            return ""
+
+        return child.text.strip()
+
+    @staticmethod
+    def _clean_text(value: str) -> str:
+        return value.replace("\n", " ").strip()
+
+    def _extract_arxiv_id(
+        self,
+        entry: ET.Element,
+    ) -> Optional[str]:
+
+        raw_id = self._get_text(entry, "id")
+
+        match = re.search(
+            r"arxiv\.org/abs/([^\s]+)",
+            raw_id,
+        )
+
+        if not match:
+            return None
+
+        return re.sub(
+            r"v\d+$",
+            "",
+            match.group(1),
+        )
+
+    @staticmethod
+    def _extract_year(
+        published_date: str,
+    ) -> Optional[int]:
+
+        if not published_date:
+            return None
+
+        match = re.match(
+            r"(\d{4})",
+            published_date,
+        )
+
+        return (
+            int(match.group(1))
+            if match
+            else None
+        )
+
+    def _extract_doi(
+        self,
+        entry: ET.Element,
+    ) -> Optional[str]:
+
+        doi_element = entry.find(
+            f"{{{ARXIV_NS}}}doi"
+        )
+
+        if (
+            doi_element is None
+            or not doi_element.text
+        ):
+            return None
+
+        return doi_element.text.strip()
+
+    def _extract_authors(
+        self,
+        entry: ET.Element,
+    ) -> list[Author]:
+
+        authors = []
+
+        for author_element in entry.findall(
+            f"{{{ATOM_NS}}}author"
+        ):
+
+            name_element = author_element.find(
+                f"{{{ATOM_NS}}}name"
+            )
+
+            if (
+                name_element is not None
+                and name_element.text
+            ):
+                authors.append(
+                    Author(
+                        name=name_element.text.strip()
+                    )
+                )
+
+        return authors
+
+    def _extract_fields(
+        self,
+        entry: ET.Element,
+    ) -> list[str]:
+
+        fields = []
+
+        for category in entry.findall(
+            f"{{{ATOM_NS}}}category"
+        ):
+
+            term = category.get("term")
+
+            if term:
+                fields.append(term)
+
+        return fields
+
+    def _extract_urls(
+        self,
+        entry: ET.Element,
+        arxiv_id: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+
+        pdf_url = None
+        landing_url = None
+
+        for link in entry.findall(
+            f"{{{ATOM_NS}}}link"
+        ):
+
+            rel = link.get("rel", "")
+            href = link.get("href", "")
+
+            if (
+                link.get("type")
+                == "application/pdf"
+            ):
+                pdf_url = href
+
+            elif rel == "alternate":
+                landing_url = href
+
+        if arxiv_id:
+
+            if not pdf_url:
+                pdf_url = (
+                    f"https://arxiv.org/pdf/"
+                    f"{arxiv_id}.pdf"
+                )
+
+            if not landing_url:
+                landing_url = (
+                    f"https://arxiv.org/abs/"
+                    f"{arxiv_id}"
+                )
+
+        return pdf_url, landing_url
+
+    @staticmethod
+    def _extract_total_results(
+        root: ET.Element,
+    ) -> int:
+
+        total_element = root.find(
+            f"{{{OPENSEARCH_NS}}}totalResults"
+        )
+
+        if (
+            total_element is None
+            or not total_element.text
+        ):
+            return 0
+
+        try:
+            return int(total_element.text)
+
+        except ValueError:
+            logger.warning(
+                "Invalid totalResults value='%s'",
+                total_element.text,
+            )
+            return 0

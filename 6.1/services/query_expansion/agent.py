@@ -1,287 +1,618 @@
 """
-Query Expansion Agent.
-
-Takes a single research idea and generates a rich set of retrieval queries
-covering: paraphrases, terminology expansion, acronym expansion,
-adjacent subfields, methodology variants, and benchmark variants.
-
-LLM backend: Qwen3 via Ollama (dev) or vLLM (production).
-Falls back to rule-based expansion when LLM is unavailable.
-
-NO paid APIs. NO Anthropic dependency.
+Query expansion agent for research retrieval.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from enum import Enum
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.utils import get_http_client, get_logger
+from research_discovery.core.utils import (
+    get_http_client,
+    get_logger,
+)
 
 logger = get_logger(__name__)
+
+DEFAULT_QUERY_COUNT = 10
+
+LLM_TIMEOUT_SECONDS = 60
+
+MIN_QUERY_COUNT = 3
+
+MIN_QUERY_LENGTH = 3
+MAX_QUERY_LENGTH = 120
 
 
 # ---------------------------------------------------------------------------
 # Prompt
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are an expert academic research query expansion assistant.
+SYSTEM_PROMPT = """
+You are an expert academic research query expansion assistant.
 
 Given a research idea, generate diverse search queries to maximize recall
 across academic databases (OpenAlex, arXiv, Semantic Scholar).
 
 Return ONLY a valid JSON array of strings. No preamble. No markdown fences.
-No explanation. Just the raw JSON array.
 
 Cover ALL of these angles:
-1. Direct paraphrases (2–3 variants with different wording)
-2. Terminology expansion (synonyms, alternative technical terms)
-3. Acronym expansions and contractions
-4. Adjacent subfields or related disciplines
-5. Methodology and technique expansions
-6. Benchmark and dataset expansions
-7. Temporal variants (foundational + recent emerging work)
+1. Direct paraphrases
+2. Terminology expansion
+3. Acronym expansion
+4. Adjacent subfields
+5. Methodology variants
+6. Benchmark/dataset variants
+7. Foundational + emerging terminology
 
 Rules:
 - Each query must be 3–10 words
-- Queries must be meaningfully different from each other
-- Use natural academic search phrasing
-- Return format: ["query 1", "query 2", ...]"""
+- Queries must differ meaningfully
+- Use natural academic phrasing
+"""
+
+
+def build_user_prompt(
+    idea: str,
+    num_queries: int,
+) -> str:
+
+    return (
+        f"Research idea: {idea}\n\n"
+        f"Generate {num_queries} "
+        f"diverse academic search queries."
+    )
 
 
 # ---------------------------------------------------------------------------
-# Rule-based fallback
+# Rule Expansion
 # ---------------------------------------------------------------------------
 
-EXPANSION_RULES: dict[str, list[str]] = {
-    "llm": ["large language model", "foundation model", "language model"],
-    "nlp": ["natural language processing", "computational linguistics", "text processing"],
-    "ml": ["machine learning", "statistical learning", "predictive modeling"],
-    "dl": ["deep learning", "neural network", "deep neural network"],
-    "rl": ["reinforcement learning", "reward learning", "policy optimization"],
-    "transformer": ["attention mechanism", "encoder decoder", "self attention", "vision transformer"],
-    "code review": ["software review", "pull request analysis", "code quality", "static analysis"],
-    "rag": ["retrieval augmented generation", "retrieval enhanced generation", "grounded generation"],
-    "agent": ["autonomous agent", "ai agent", "language agent", "tool use agent"],
-    "multimodal": ["vision language", "cross modal", "image text", "vision model"],
-    "fine-tuning": ["parameter efficient tuning", "lora", "instruction tuning", "peft"],
-    "knowledge graph": ["entity relation", "graph neural network", "ontology", "knowledge base"],
-    "computer vision": ["image recognition", "object detection", "visual understanding"],
-    "diffusion": ["generative model", "score matching", "denoising model", "latent diffusion"],
+EXPANSION_RULES = {
+    "llm": [
+        "large language model",
+        "foundation model",
+        "language model",
+    ],
+    "nlp": [
+        "natural language processing",
+        "computational linguistics",
+        "text processing",
+    ],
+    "ml": [
+        "machine learning",
+        "statistical learning",
+        "predictive modeling",
+    ],
+    "rag": [
+        "retrieval augmented generation",
+        "grounded generation",
+        "retrieval enhanced generation",
+    ],
+    "agent": [
+        "autonomous agent",
+        "ai agent",
+        "tool use agent",
+    ],
 }
 
 
-def _rule_based_expand(idea: str, n: int = 8) -> list[str]:
-    """Rule-based fallback when LLM is unavailable."""
-    queries = [idea]
-    idea_lower = idea.lower()
+class RuleBasedExpander:
+    """Fallback rule-based query expansion."""
 
-    for term, expansions in EXPANSION_RULES.items():
-        if term in idea_lower:
-            for exp in expansions:
-                variant = re.sub(re.escape(term), exp, idea_lower, flags=re.IGNORECASE)
-                queries.append(variant.strip())
+    @staticmethod
+    def expand(
+        idea: str,
+        limit: int,
+    ) -> list[str]:
 
-    # Structural variants
-    words = idea.split()
-    if len(words) >= 3:
-        queries.append(" ".join(words[:3]))
-        queries.append(" ".join(words[-3:]))
-    if len(words) >= 4:
-        queries.append(" ".join(words[:4]))
+        queries = [idea]
 
-    # Deduplicate, preserve order
-    seen: set[str] = set()
-    result: list[str] = []
-    for q in queries:
-        q = q.strip()
-        if q and q not in seen:
-            seen.add(q)
-            result.append(q)
+        lowered = idea.lower()
 
-    return result[:n]
+        for term, expansions in (
+            EXPANSION_RULES.items()
+        ):
+
+            if term not in lowered:
+                continue
+
+            for expansion in expansions:
+
+                variant = re.sub(
+                    re.escape(term),
+                    expansion,
+                    lowered,
+                    flags=re.IGNORECASE,
+                )
+
+                queries.append(
+                    variant.strip()
+                )
+
+        queries.extend(
+            RuleBasedExpander._structural_variants(
+                idea
+            )
+        )
+
+        return QueryCleaner.deduplicate(
+            queries
+        )[:limit]
+
+    @staticmethod
+    def _structural_variants(
+        idea: str,
+    ) -> list[str]:
+
+        variants = []
+
+        words = idea.split()
+
+        if len(words) >= 3:
+
+            variants.append(
+                " ".join(words[:3])
+            )
+
+            variants.append(
+                " ".join(words[-3:])
+            )
+
+        if len(words) >= 4:
+
+            variants.append(
+                " ".join(words[:4])
+            )
+
+        return variants
 
 
 # ---------------------------------------------------------------------------
-# Ollama LLM call
+# LLM Providers
 # ---------------------------------------------------------------------------
 
-async def _ollama_expand(idea: str, n: int = 10) -> Optional[list[str]]:
-    """
-    Call local Ollama server running Qwen3.
+class LLMProvider(str, Enum):
+    OLLAMA = "ollama"
+    VLLM = "vllm"
 
-    Ollama uses a different API format from OpenAI:
-      POST /api/chat
-      { model, messages, stream, options }
-    """
-    url = f"{settings.api.ollama_base_url}/api/chat"
-    payload = {
-        "model": settings.api.qwen3_model,
-        "stream": False,
-        "options": {
-            "temperature": settings.api.llm_temperature,
-            "num_predict": settings.api.llm_max_tokens,
-        },
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+
+class LLMQueryExpander:
+    """LLM-based query expansion."""
+
+    async def expand(
+        self,
+        provider: LLMProvider,
+        idea: str,
+        num_queries: int,
+    ) -> Optional[list[str]]:
+
+        try:
+
+            payload = self._build_payload(
+                provider=provider,
+                idea=idea,
+                num_queries=num_queries,
+            )
+
+            url = self._build_url(
+                provider
+            )
+
+            data = await self._post(
+                url=url,
+                payload=payload,
+            )
+
+            content = (
+                self._extract_content(
+                    provider,
+                    data,
+                )
+            )
+
+            return QueryResponseParser.parse(
+                content=content,
+                original_idea=idea,
+            )
+
+        except Exception:
+
+            logger.exception(
+                "LLM query expansion failed provider=%s",
+                provider,
+            )
+
+            return None
+
+    async def _post(
+        self,
+        url: str,
+        payload: dict,
+    ) -> dict:
+
+        async with get_http_client(
+            timeout=LLM_TIMEOUT_SECONDS,
+        ) as client:
+
+            response = await client.post(
+                url,
+                json=payload,
+            )
+
+            response.raise_for_status()
+
+            return response.json()
+
+    @staticmethod
+    def _build_url(
+        provider: LLMProvider,
+    ) -> str:
+
+        if provider == LLMProvider.VLLM:
+
+            return (
+                f"{settings.api.vllm_base_url}"
+                "/chat/completions"
+            )
+
+        return (
+            f"{settings.api.ollama_base_url}"
+            "/api/chat"
+        )
+
+    @staticmethod
+    def _build_payload(
+        provider: LLMProvider,
+        idea: str,
+        num_queries: int,
+    ) -> dict:
+
+        messages = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
             {
                 "role": "user",
-                "content": f"Research idea: {idea}\n\nGenerate {n} diverse search queries.",
+                "content": build_user_prompt(
+                    idea,
+                    num_queries,
+                ),
             },
-        ],
-    }
+        ]
 
-    try:
-        async with get_http_client(timeout=60) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        if provider == LLMProvider.VLLM:
 
-        # Ollama response: { message: { content: "..." } }
-        content = data.get("message", {}).get("content", "").strip()
-        return _parse_llm_response(content, idea)
+            return {
+                "model": (
+                    settings.api.qwen3_model
+                ),
+                "temperature": (
+                    settings.api.llm_temperature
+                ),
+                "max_tokens": (
+                    settings.api.llm_max_tokens
+                ),
+                "messages": messages,
+            }
 
-    except Exception as exc:
-        logger.warning(f"Ollama expand failed: {exc}")
-        return None
-
-
-# ---------------------------------------------------------------------------
-# vLLM LLM call (OpenAI-compatible)
-# ---------------------------------------------------------------------------
-
-async def _vllm_expand(idea: str, n: int = 10) -> Optional[list[str]]:
-    """
-    Call vLLM server (OpenAI-compatible /v1/chat/completions endpoint).
-
-    vLLM serves the same OpenAI API format, so this works for any
-    model loaded in vLLM (Qwen3-14B, DeepSeek, etc.).
-    """
-    url = f"{settings.api.vllm_base_url}/chat/completions"
-    payload = {
-        "model": settings.api.qwen3_model,
-        "temperature": settings.api.llm_temperature,
-        "max_tokens": settings.api.llm_max_tokens,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Research idea: {idea}\n\nGenerate {n} diverse search queries.",
+        return {
+            "model": (
+                settings.api.qwen3_model
+            ),
+            "stream": False,
+            "options": {
+                "temperature": (
+                    settings.api.llm_temperature
+                ),
+                "num_predict": (
+                    settings.api.llm_max_tokens
+                ),
             },
-        ],
-    }
+            "messages": messages,
+        }
 
-    try:
-        async with get_http_client(timeout=60) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+    @staticmethod
+    def _extract_content(
+        provider: LLMProvider,
+        data: dict,
+    ) -> str:
 
-        # OpenAI-compatible response format
-        content = (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
+        if provider == LLMProvider.VLLM:
+
+            return (
+                data.get(
+                    "choices",
+                    [{}],
+                )[0]
+                .get(
+                    "message",
+                    {},
+                )
+                .get(
+                    "content",
+                    "",
+                )
+                .strip()
+            )
+
+        return (
+            data.get(
+                "message",
+                {},
+            )
+            .get(
+                "content",
+                "",
+            )
             .strip()
         )
-        return _parse_llm_response(content, idea)
-
-    except Exception as exc:
-        logger.warning(f"vLLM expand failed: {exc}")
-        return None
 
 
 # ---------------------------------------------------------------------------
-# Response parser (shared)
+# Response Parsing
 # ---------------------------------------------------------------------------
 
-def _parse_llm_response(content: str, original_idea: str) -> Optional[list[str]]:
-    """
-    Parse JSON array from LLM text output.
-    Handles markdown fences, extra whitespace, trailing text.
-    """
-    if not content:
-        return None
+class QueryResponseParser:
+    """Parses and validates LLM responses."""
 
-    # Strip markdown code fences if model added them
-    content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.MULTILINE)
-    content = re.sub(r"\s*```\s*$", "", content, flags=re.MULTILINE)
-    content = content.strip()
+    @staticmethod
+    def parse(
+        content: str,
+        original_idea: str,
+    ) -> Optional[list[str]]:
 
-    # Find JSON array in the response (model may add preamble)
-    match = re.search(r"\[.*?\]", content, flags=re.DOTALL)
-    if match:
-        content = match.group(0)
-
-    try:
-        queries = json.loads(content)
-        if not isinstance(queries, list):
-            logger.warning("LLM returned non-list JSON — falling back")
+        if not content:
             return None
-        # Filter and clean
-        result = [str(q).strip() for q in queries if q and str(q).strip()]
-        if len(result) < 3:
-            logger.warning(f"LLM returned only {len(result)} queries — falling back")
+
+        cleaned = (
+            QueryResponseParser
+            ._strip_markdown(
+                content
+            )
+        )
+
+        extracted = (
+            QueryResponseParser
+            ._extract_json_array(
+                cleaned
+            )
+        )
+
+        if not extracted:
             return None
-        logger.info(f"LLM expanded '{original_idea}' → {len(result)} queries")
-        return result
-    except json.JSONDecodeError as exc:
-        logger.warning(f"LLM response JSON parse failed: {exc} | content: {content[:200]}")
-        return None
+
+        try:
+
+            parsed = json.loads(
+                extracted
+            )
+
+        except json.JSONDecodeError:
+
+            logger.warning(
+                "LLM JSON parse failed"
+            )
+
+            return None
+
+        if not isinstance(parsed, list):
+            return None
+
+        queries = [
+            QueryCleaner.clean(query)
+            for query in parsed
+            if isinstance(query, str)
+        ]
+
+        queries = [
+            query
+            for query in queries
+            if QueryCleaner.is_valid(
+                query
+            )
+        ]
+
+        queries = QueryCleaner.deduplicate(
+            queries
+        )
+
+        if len(queries) < MIN_QUERY_COUNT:
+
+            logger.warning(
+                "Insufficient query expansion "
+                "query_count=%s",
+                len(queries),
+            )
+
+            return None
+
+        logger.info(
+            "Expanded query '%s' into %s queries",
+            original_idea,
+            len(queries),
+        )
+
+        return queries
+
+    @staticmethod
+    def _strip_markdown(
+        content: str,
+    ) -> str:
+
+        content = re.sub(
+            r"^```(?:json)?\s*",
+            "",
+            content,
+            flags=re.MULTILINE,
+        )
+
+        content = re.sub(
+            r"\s*```$",
+            "",
+            content,
+            flags=re.MULTILINE,
+        )
+
+        return content.strip()
+
+    @staticmethod
+    def _extract_json_array(
+        content: str,
+    ) -> Optional[str]:
+
+        start = content.find("[")
+
+        end = content.rfind("]")
+
+        if start == -1 or end == -1:
+            return None
+
+        if end <= start:
+            return None
+
+        return content[start:end + 1]
 
 
 # ---------------------------------------------------------------------------
-# Public interface
+# Query Cleaning
+# ---------------------------------------------------------------------------
+
+class QueryCleaner:
+    """Query normalization and filtering."""
+
+    @staticmethod
+    def clean(
+        query: str,
+    ) -> str:
+
+        query = query.strip()
+
+        query = re.sub(
+            r"\s+",
+            " ",
+            query,
+        )
+
+        return query
+
+    @staticmethod
+    def is_valid(
+        query: str,
+    ) -> bool:
+
+        if not query:
+            return False
+
+        return (
+            MIN_QUERY_LENGTH
+            <= len(query)
+            <= MAX_QUERY_LENGTH
+        )
+
+    @staticmethod
+    def deduplicate(
+        queries: list[str],
+    ) -> list[str]:
+
+        seen = set()
+
+        deduplicated = []
+
+        for query in queries:
+
+            normalized = (
+                query.lower()
+            )
+
+            if normalized in seen:
+                continue
+
+            seen.add(normalized)
+
+            deduplicated.append(query)
+
+        return deduplicated
+
+
+# ---------------------------------------------------------------------------
+# Public Agent
 # ---------------------------------------------------------------------------
 
 class QueryExpansionAgent:
     """
-    Expands a research idea into multiple retrieval queries.
-
-    Strategy priority:
-    1. vLLM (production) — if USE_VLLM=true
-    2. Ollama (local dev) — default
-    3. Rule-based — fallback if both LLM servers are unreachable
-
-    All LLM inference is fully local. No paid APIs.
+    Expands research ideas into retrieval queries.
     """
 
-    def __init__(self, num_queries: int = 10):
+    def __init__(
+        self,
+        num_queries: int = DEFAULT_QUERY_COUNT,
+    ):
+
         self.num_queries = num_queries
 
-    async def expand(self, research_idea: str) -> list[str]:
-        """
-        Returns a deduplicated list of diverse search queries.
-        Always includes the original idea.
-        """
-        logger.info(f"Expanding query: '{research_idea}'")
+        self._llm_expander = (
+            LLMQueryExpander()
+        )
 
-        # Route to correct LLM backend
-        if settings.api.use_vllm:
-            logger.debug("Using vLLM for query expansion")
-            queries = await _vllm_expand(research_idea, n=self.num_queries)
-        else:
-            logger.debug("Using Ollama for query expansion")
-            queries = await _ollama_expand(research_idea, n=self.num_queries)
+    async def expand(
+        self,
+        research_idea: str,
+    ) -> list[str]:
 
-        # Fallback to rule-based if LLM failed
+        logger.info(
+            "Expanding research idea='%s'",
+            research_idea,
+        )
+
+        provider = (
+            LLMProvider.VLLM
+            if settings.api.use_vllm
+            else LLMProvider.OLLAMA
+        )
+
+        queries = (
+            await self._llm_expander.expand(
+                provider=provider,
+                idea=research_idea,
+                num_queries=(
+                    self.num_queries
+                ),
+            )
+        )
+
         if not queries:
-            logger.info("LLM unavailable — using rule-based expansion")
-            queries = _rule_based_expand(research_idea, n=self.num_queries)
 
-        # Always ensure original idea is present
+            logger.info(
+                "Falling back to "
+                "rule-based expansion"
+            )
+
+            queries = (
+                RuleBasedExpander.expand(
+                    research_idea,
+                    limit=self.num_queries,
+                )
+            )
+
         if research_idea not in queries:
-            queries.insert(0, research_idea)
 
-        # Deduplicate while preserving order
-        seen: set[str] = set()
-        deduped: list[str] = []
-        for q in queries:
-            if q and q not in seen:
-                seen.add(q)
-                deduped.append(q)
+            queries.insert(
+                0,
+                research_idea,
+            )
 
-        logger.info(f"Final query set ({len(deduped)} queries): {deduped}")
-        return deduped
+        queries = QueryCleaner.deduplicate(
+            queries
+        )
+
+        logger.info(
+            "Final expanded query count=%s",
+            len(queries),
+        )
+
+        return queries
