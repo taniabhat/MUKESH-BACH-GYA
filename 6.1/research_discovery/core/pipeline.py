@@ -345,12 +345,12 @@ class EmbeddingStage:
     ) -> None:
 
         context.query_embedding = (
-            self.services.embedder.embed_query(
+            await self.services.embedder.embed_query(
                 context.research_idea
             )
         )
 
-        self.services.embedder.embed_papers(
+        await self.services.embedder.embed_papers(
             context.deduplicated_papers
         )
 
@@ -409,7 +409,7 @@ class CitationExpansionStage:
             )
         )
 
-        self.services.embedder.embed_papers(
+        await self.services.embedder.embed_papers(
             expanded
         )
 
