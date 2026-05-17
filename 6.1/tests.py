@@ -20,13 +20,13 @@ from research_discovery.models.paper import (
 from research_discovery.services.dedup.engine import (
     DeduplicationEngine,
 )
-from research_discovery.providers.factory import (
-    ProviderFactory,
+from research_discovery.services.embedding.service import (
+    EmbeddingService,
 )
 from research_discovery.services.ranking.engine import (
     RankingEngine,
 )
-from research_discovery.services.storage.service import (
+from research_discovery.services.storage.json_store import (
     JSONStorageService,
 )
 
@@ -95,7 +95,7 @@ class RetrievalProviderContract(
 # ---------------------------------------------------------------------------
 
 class TestPaperModel(
-    unittest.TestCase
+    unittest.IsolatedAsyncioTestCase
 ):
 
     def test_paper_creation(
@@ -141,7 +141,7 @@ class TestPaperModel(
 # ---------------------------------------------------------------------------
 
 class TestDeduplicationEngine(
-    unittest.TestCase
+    unittest.IsolatedAsyncioTestCase
 ):
 
     def setUp(
@@ -209,8 +209,13 @@ class TestDeduplicationEngine(
 # Embedding Tests
 # ---------------------------------------------------------------------------
 
+class MockEmbeddingProvider:
+    async def embed(self, texts):
+        import numpy as np
+        return [np.random.rand(10).tolist() for _ in texts]
+
 class TestEmbeddingService(
-    unittest.TestCase
+    unittest.IsolatedAsyncioTestCase
 ):
 
     def setUp(
@@ -218,15 +223,16 @@ class TestEmbeddingService(
     ):
 
         self.embedder = (
-            ProviderFactory.create_embedding_provider()
+            EmbeddingService()
         )
+        self.embedder.provider = MockEmbeddingProvider()
 
-    def test_embed_query(
+    async def test_embed_query(
         self,
     ):
 
         embedding = (
-            self.embedder.embed_query(
+            await self.embedder.embed_query(
                 "transformer attention"
             )
         )
@@ -236,7 +242,7 @@ class TestEmbeddingService(
             0,
         )
 
-    def test_compute_similarity(
+    async def test_compute_similarity(
         self,
     ):
 
@@ -249,12 +255,12 @@ class TestEmbeddingService(
             )
         ]
 
-        self.embedder.embed_papers(
+        await self.embedder.embed_papers(
             papers
         )
 
         query_embedding = (
-            self.embedder.embed_query(
+            await self.embedder.embed_query(
                 "transformer"
             )
         )
@@ -278,7 +284,7 @@ class TestEmbeddingService(
 # ---------------------------------------------------------------------------
 
 class TestRankingEngine(
-    unittest.TestCase
+    unittest.IsolatedAsyncioTestCase
 ):
 
     def setUp(
@@ -290,10 +296,11 @@ class TestRankingEngine(
         )
 
         self.embedder = (
-            ProviderFactory.create_embedding_provider()
+            EmbeddingService()
         )
+        self.embedder.provider = MockEmbeddingProvider()
 
-    def test_rank_assigns_scores(
+    async def test_rank_assigns_scores(
         self,
     ):
 
@@ -314,12 +321,12 @@ class TestRankingEngine(
             ),
         ]
 
-        self.embedder.embed_papers(
+        await self.embedder.embed_papers(
             papers
         )
 
         query_embedding = (
-            self.embedder.embed_query(
+            await self.embedder.embed_query(
                 "transformer"
             )
         )
@@ -359,7 +366,7 @@ class TestRankingEngine(
 # ---------------------------------------------------------------------------
 
 class TestStorageService(
-    unittest.TestCase
+    unittest.IsolatedAsyncioTestCase
 ):
 
     def setUp(
@@ -447,7 +454,7 @@ class TestStorageService(
 # ---------------------------------------------------------------------------
 
 class TestRuntimeSmoke(
-    unittest.TestCase
+    unittest.IsolatedAsyncioTestCase
 ):
 
     def test_pipeline_importable(

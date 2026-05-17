@@ -14,9 +14,7 @@ name = "research-discovery"
 
 version = "1.0.0"
 
-description = (
-    "Modular academic retrieval and ranking platform"
-)
+description = "Modular academic retrieval and ranking platform"
 
 readme = "README.md"
 
@@ -207,9 +205,7 @@ full = [
 
 [project.scripts]
 
-research-discover = (
-    "research_discovery.cli:cli"
-)
+research-discover = "research_discovery.cli:cli"
 
 # ---------------------------------------------------------------------------
 # Package Discovery

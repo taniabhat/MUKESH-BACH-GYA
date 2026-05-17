@@ -160,6 +160,50 @@ def api_retry(
 # HTTP Runtime
 # ---------------------------------------------------------------------------
 
+class HTTPClientProxy:
+    """Proxy for making per-request overrides on a shared httpx client."""
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        headers: Optional[dict] = None,
+        timeout: Optional[httpx.Timeout] = None,
+    ):
+        self._client = client
+        self._headers = headers or {}
+        self._timeout = timeout
+
+    async def get(self, url: str, **kwargs) -> httpx.Response:
+        headers = dict(kwargs.pop("headers", {}))
+        headers.update(self._headers)
+        
+        timeout = kwargs.pop("timeout", self._timeout)
+        if timeout is None:
+            timeout = self._client.timeout
+            
+        return await self._client.get(
+            url,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
+        )
+
+    async def post(self, url: str, **kwargs) -> httpx.Response:
+        headers = dict(kwargs.pop("headers", {}))
+        headers.update(self._headers)
+        
+        timeout = kwargs.pop("timeout", self._timeout)
+        if timeout is None:
+            timeout = self._client.timeout
+            
+        return await self._client.post(
+            url,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
+        )
+
+
 class HTTPRuntime:
     """
     Shared async HTTP runtime.
@@ -228,7 +272,7 @@ class HTTPRuntime:
         ] = None,
         timeout: Optional[float] = None,
     ) -> AsyncGenerator[
-        httpx.AsyncClient,
+        HTTPClientProxy,
         None,
     ]:
 
@@ -236,22 +280,17 @@ class HTTPRuntime:
 
             await cls.startup()
 
-        merged_headers = dict(cls._client.headers)
-        if headers:
-            merged_headers.update(headers)
-
         temp_timeout = (
             httpx.Timeout(timeout)
             if timeout is not None
-            else cls._client.timeout
+            else None
         )
 
-        async with httpx.AsyncClient(
-            transport=cls._client._transport,
-            headers=merged_headers,
+        yield HTTPClientProxy(
+            client=cls._client,
+            headers=headers,
             timeout=temp_timeout,
-        ) as temp_client:
-            yield temp_client
+        )
 
 
 @asynccontextmanager

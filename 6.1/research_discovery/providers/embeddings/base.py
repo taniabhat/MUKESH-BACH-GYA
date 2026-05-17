@@ -6,6 +6,6 @@ class EmbeddingProvider(
 
     async def embed(
         self,
-        text: str,
-    ) -> list[float]:
+        texts: list[str],
+    ) -> list[list[float]]:
         ...
