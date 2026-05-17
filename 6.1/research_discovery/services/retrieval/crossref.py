@@ -1,5 +1,5 @@
 """
-CrossRef Adapter — Metadata enrichment and DOI resolution.
+CrossRef retrieval and metadata enrichment adapter.
 """
 
 from __future__ import annotations
@@ -9,7 +9,9 @@ import re
 import urllib.parse
 from typing import Optional
 
-from research_discovery.config.settings import settings
+from research_discovery.config.settings import (
+    settings,
+)
 from research_discovery.core.runtime import (
     api_retry,
     get_http_client,
@@ -20,11 +22,13 @@ from research_discovery.models.paper import (
     ExternalIDs,
     Paper,
     PaperSource,
+    SearchResult,
 )
 
 logger = get_logger(__name__)
 
 BASE_URL = settings.crossref.base_url
+
 MAILTO = settings.crossref.mailto
 
 POLITE_HEADERS = {
@@ -38,58 +42,33 @@ MAX_AUTHORS = 20
 
 
 class CrossRefAdapter:
-    """Metadata enrichment via CrossRef."""
-
-    async def fetch_by_doi(
-        self,
-        doi: str,
-    ) -> Optional[Paper]:
-
-        try:
-            encoded_doi = urllib.parse.quote(
-                doi,
-                safe="",
-            )
-
-            url = f"{BASE_URL}/{encoded_doi}"
-
-            data = await self._fetch_json(url)
-
-            raw = data.get("message", {})
-
-            return self._parse_work(
-                raw,
-                query=f"doi:{doi}",
-            )
-
-        except Exception:
-            logger.exception(
-                "CrossRef DOI fetch failed doi='%s'",
-                doi,
-            )
-            return None
+    """
+    CrossRef retrieval and enrichment adapter.
+    """
 
     async def search(
         self,
         query: str,
-        rows: int = 10,
-    ) -> list[Paper]:
+        limit: int = 20,
+    ) -> SearchResult:
 
         params = {
             "query": query,
-            "rows": rows,
+            "rows": limit,
+            "mailto": MAILTO,
             "select": (
                 "DOI,title,author,published,"
+                "published-print,published-online,"
                 "container-title,abstract,"
                 "is-referenced-by-count,"
                 "URL,link"
             ),
-            "mailto": MAILTO,
         }
 
-        papers: list[Paper] = []
+        papers = []
 
         try:
+
             data = await self._fetch_json(
                 BASE_URL,
                 params=params,
@@ -101,89 +80,181 @@ class CrossRefAdapter:
             )
 
             for item in items:
+
                 try:
-                    paper = self._parse_work(
-                        item,
-                        query=query,
+
+                    paper = (
+                        self._parse_work(
+                            raw=item,
+                            query=query,
+                        )
                     )
 
                     if paper:
-                        papers.append(paper)
+                        papers.append(
+                            paper
+                        )
 
                 except Exception:
+
                     logger.exception(
-                        "Failed to parse CrossRef item"
+                        "Failed parsing "
+                        "CrossRef item"
                     )
 
-        except Exception:
+            logger.info(
+                "CrossRef retrieved "
+                "query='%s' papers=%s",
+                query,
+                len(papers),
+            )
+
+            return SearchResult(
+                source=PaperSource.CROSSREF,
+                query=query,
+                papers=papers,
+                total_found=len(papers),
+            )
+
+        except Exception as exc:
+
             logger.exception(
-                "CrossRef search failed query='%s'",
+                "CrossRef search failed "
+                "query='%s'",
                 query,
             )
 
-        return papers
+            return SearchResult(
+                source=PaperSource.CROSSREF,
+                query=query,
+                papers=[],
+                total_found=0,
+                error=str(exc),
+            )
+
+    async def fetch_by_doi(
+        self,
+        doi: str,
+    ) -> Optional[Paper]:
+
+        try:
+
+            encoded_doi = (
+                urllib.parse.quote(
+                    doi,
+                    safe="",
+                )
+            )
+
+            url = (
+                f"{BASE_URL}/"
+                f"{encoded_doi}"
+            )
+
+            data = await self._fetch_json(
+                url
+            )
+
+            raw = data.get(
+                "message",
+                {},
+            )
+
+            return self._parse_work(
+                raw=raw,
+                query=f"doi:{doi}",
+            )
+
+        except Exception:
+
+            logger.exception(
+                "CrossRef DOI fetch failed "
+                "doi='%s'",
+                doi,
+            )
+
+            return None
 
     async def enrich_papers(
         self,
         papers: list[Paper],
     ) -> list[Paper]:
 
-        enrichment_tasks = []
-        paper_indices = []
+        tasks = []
 
-        for index, paper in enumerate(papers):
+        indices = []
 
-            if not self._should_enrich(paper):
+        for index, paper in enumerate(
+            papers
+        ):
+
+            if not self._should_enrich(
+                paper
+            ):
                 continue
 
-            doi = paper.get_best_doi()
+            doi = (
+                paper.get_best_doi()
+            )
 
             if not doi:
                 continue
 
-            enrichment_tasks.append(
-                self.fetch_by_doi(doi)
+            tasks.append(
+                self.fetch_by_doi(
+                    doi
+                )
             )
 
-            paper_indices.append(index)
+            indices.append(index)
 
-        if not enrichment_tasks:
+        if not tasks:
             return papers
 
         results = await asyncio.gather(
-            *enrichment_tasks,
+            *tasks,
             return_exceptions=True,
         )
 
-        enriched_papers = papers.copy()
+        enriched = papers.copy()
 
         for index, result in zip(
-            paper_indices,
+            indices,
             results,
         ):
 
-            if not isinstance(result, Paper):
+            if not isinstance(
+                result,
+                Paper,
+            ):
                 continue
 
-            enriched_papers[index] = (
+            enriched[index] = (
                 self._merge_paper_metadata(
-                    original=enriched_papers[index],
+                    original=(
+                        enriched[index]
+                    ),
                     enrichment=result,
                 )
             )
 
-        return enriched_papers
+        return enriched
 
-    @api_retry(max_attempts=settings.crossref.max_retries)
+    @api_retry(
+        max_attempts=(
+            settings.http.max_retries
+        )
+    )
     async def _fetch_json(
         self,
         url: str,
-        params: Optional[dict] = None,
+        params: Optional[
+            dict
+        ] = None,
     ) -> dict:
 
         async with get_http_client(
-            timeout=settings.http.timeout,
-            headers=POLITE_HEADERS,
+            headers=POLITE_HEADERS
         ) as client:
 
             response = await client.get(
@@ -200,12 +271,14 @@ class CrossRefAdapter:
         paper: Paper,
     ) -> bool:
 
-        return any([
-            not paper.venue,
-            not paper.year,
-            not paper.abstract,
-            not paper.authors,
-        ])
+        return any(
+            [
+                not paper.venue,
+                not paper.year,
+                not paper.abstract,
+                not paper.authors,
+            ]
+        )
 
     def _parse_work(
         self,
@@ -213,7 +286,9 @@ class CrossRefAdapter:
         query: str = "",
     ) -> Optional[Paper]:
 
-        title = self._extract_title(raw)
+        title = self._extract_title(
+            raw
+        )
 
         if not title:
             return None
@@ -221,18 +296,38 @@ class CrossRefAdapter:
         return Paper(
             source=PaperSource.CROSSREF,
             external_ids=ExternalIDs(
-                doi=self._extract_doi(raw),
+                doi=self._extract_doi(
+                    raw
+                )
             ),
             title=title,
-            abstract=self._extract_abstract(raw),
-            authors=self._extract_authors(raw),
-            year=self._extract_year(raw),
-            venue=self._extract_venue(raw),
-            citation_count=self._extract_citation_count(raw),
-            pdf_url=self._extract_pdf_url(raw),
-            landing_page_url=raw.get("URL"),
+            abstract=self._extract_abstract(
+                raw
+            ),
+            authors=self._extract_authors(
+                raw
+            ),
+            year=self._extract_year(
+                raw
+            ),
+            venue=self._extract_venue(
+                raw
+            ),
+            citation_count=(
+                self._extract_citation_count(
+                    raw
+                )
+            ),
+            pdf_url=self._extract_pdf_url(
+                raw
+            ),
+            landing_page_url=raw.get(
+                "URL"
+            ),
             retrieved_from_queries=(
-                [query] if query else []
+                [query]
+                if query
+                else []
             ),
         )
 
@@ -241,7 +336,10 @@ class CrossRefAdapter:
         raw: dict,
     ) -> str:
 
-        titles = raw.get("title", [])
+        titles = raw.get(
+            "title",
+            [],
+        )
 
         if not titles:
             return ""
@@ -253,7 +351,10 @@ class CrossRefAdapter:
         raw: dict,
     ) -> Optional[str]:
 
-        doi = raw.get("DOI", "")
+        doi = raw.get(
+            "DOI",
+            "",
+        )
 
         doi = doi.lower().strip()
 
@@ -271,11 +372,19 @@ class CrossRefAdapter:
             [],
         )[:MAX_AUTHORS]:
 
-            given = author.get("given", "")
-            family = author.get("family", "")
+            given = author.get(
+                "given",
+                "",
+            )
+
+            family = author.get(
+                "family",
+                "",
+            )
 
             full_name = (
-                f"{given} {family}".strip()
+                f"{given} {family}"
+                .strip()
                 or "Unknown"
             )
 
@@ -285,7 +394,9 @@ class CrossRefAdapter:
             )
 
             affiliation = (
-                affiliations[0].get("name")
+                affiliations[0].get(
+                    "name"
+                )
                 if affiliations
                 else None
             )
@@ -293,8 +404,12 @@ class CrossRefAdapter:
             authors.append(
                 Author(
                     name=full_name,
-                    affiliation=affiliation,
-                    orcid=author.get("ORCID"),
+                    affiliation=(
+                        affiliation
+                    ),
+                    orcid=author.get(
+                        "ORCID"
+                    ),
                 )
             )
 
@@ -305,21 +420,31 @@ class CrossRefAdapter:
         raw: dict,
     ) -> Optional[int]:
 
-        date_fields = (
+        date_fields = [
             "published",
             "published-print",
             "published-online",
-        )
+        ]
 
         for field in date_fields:
 
             date_parts = (
                 raw.get(field, {})
-                .get("date-parts", [[]])[0]
+                .get(
+                    "date-parts",
+                    [[]],
+                )[0]
             )
 
             if date_parts:
-                return int(date_parts[0])
+
+                try:
+                    return int(
+                        date_parts[0]
+                    )
+
+                except Exception:
+                    pass
 
         return None
 
@@ -328,15 +453,15 @@ class CrossRefAdapter:
         raw: dict,
     ) -> Optional[str]:
 
-        container_titles = raw.get(
+        venues = raw.get(
             "container-title",
             [],
         )
 
-        if not container_titles:
+        if not venues:
             return None
 
-        return container_titles[0]
+        return venues[0]
 
     @staticmethod
     def _extract_citation_count(
@@ -353,7 +478,9 @@ class CrossRefAdapter:
         raw: dict,
     ) -> Optional[str]:
 
-        abstract = raw.get("abstract")
+        abstract = raw.get(
+            "abstract"
+        )
 
         if not abstract:
             return None
@@ -371,13 +498,21 @@ class CrossRefAdapter:
         raw: dict,
     ) -> Optional[str]:
 
-        for link in raw.get("link", []):
+        for link in raw.get(
+            "link",
+            [],
+        ):
 
             if (
-                link.get("content-type")
+                link.get(
+                    "content-type"
+                )
                 == "application/pdf"
             ):
-                return link.get("URL")
+
+                return link.get(
+                    "URL"
+                )
 
         return None
 
@@ -387,16 +522,38 @@ class CrossRefAdapter:
         enrichment: Paper,
     ) -> Paper:
 
-        if not original.venue:
-            original.venue = enrichment.venue
+        merged = (
+            original.model_copy(
+                deep=True
+            )
+        )
 
-        if not original.year:
-            original.year = enrichment.year
+        if not merged.venue:
+            merged.venue = (
+                enrichment.venue
+            )
 
-        if not original.abstract:
-            original.abstract = enrichment.abstract
+        if not merged.year:
+            merged.year = (
+                enrichment.year
+            )
 
-        if not original.authors:
-            original.authors = enrichment.authors
+        if not merged.abstract:
+            merged.abstract = (
+                enrichment.abstract
+            )
 
-        return original
+        if not merged.authors:
+            merged.authors = (
+                enrichment.authors
+            )
+
+        if (
+            merged.citation_count
+            == 0
+        ):
+            merged.citation_count = (
+                enrichment.citation_count
+            )
+
+        return merged

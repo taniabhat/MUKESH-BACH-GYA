@@ -1,16 +1,19 @@
 """
-arXiv API Adapter — Fetches research papers using the Atom feed API.
+arXiv retrieval adapter.
 """
 
 from __future__ import annotations
 
-import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 from typing import Optional
 
 from research_discovery.config.settings import settings
-from research_discovery.core.runtime import api_retry, get_http_client, get_logger
+from research_discovery.core.runtime import (
+    api_retry,
+    get_http_client,
+    get_logger,
+)
 from research_discovery.models.paper import (
     Author,
     ExternalIDs,
@@ -25,38 +28,47 @@ BASE_URL = settings.arxiv.base_url
 
 ATOM_NS = "http://www.w3.org/2005/Atom"
 ARXIV_NS = "http://arxiv.org/schemas/atom"
-OPENSEARCH_NS = "http://a9.com/-/spec/opensearch/1.1/"
+OPENSEARCH_NS = (
+    "http://a9.com/-/spec/opensearch/1.1/"
+)
 
 MAX_FIELDS_OF_STUDY = 10
 
 
 class ArxivAdapter:
-    """Adapter for fetching papers from arXiv."""
+    """
+    arXiv retrieval adapter.
+    """
 
     async def search(
         self,
         query: str,
-        max_results: int = 20,
+        limit: int = 20,
         sort_by: str = "relevance",
     ) -> SearchResult:
 
         try:
-            xml_text = await self._fetch_results(
-                query=query,
-                max_results=max_results,
-                sort_by=sort_by,
+
+            xml_text = (
+                await self._fetch_results(
+                    query=query,
+                    limit=limit,
+                    sort_by=sort_by,
+                )
             )
 
-            papers, total_found = self._parse_response(
-                xml_text=xml_text,
-                query=query,
+            papers, total_found = (
+                self._parse_response(
+                    xml_text=xml_text,
+                    query=query,
+                )
             )
 
             logger.info(
-                "arXiv query='%s' fetched=%s total=%s",
+                "arXiv retrieved "
+                "query='%s' papers=%s",
                 query,
                 len(papers),
-                total_found,
             )
 
             return SearchResult(
@@ -67,8 +79,10 @@ class ArxivAdapter:
             )
 
         except Exception as exc:
+
             logger.exception(
-                "arXiv search failed for query='%s'",
+                "arXiv retrieval failed "
+                "query='%s'",
                 query,
             )
 
@@ -80,17 +94,22 @@ class ArxivAdapter:
                 error=str(exc),
             )
 
-    @api_retry(max_attempts=settings.arxiv.max_retries)
+    @api_retry(
+        max_attempts=(
+            settings.http.max_retries
+        )
+    )
     async def _fetch_results(
         self,
         query: str,
-        max_results: int,
+        limit: int,
         sort_by: str,
     ) -> str:
 
         params = {
             "search_query": f"all:{query}",
-            "max_results": max_results,
+            "start": 0,
+            "max_results": limit,
             "sortBy": sort_by,
             "sortOrder": "descending",
         }
@@ -101,11 +120,17 @@ class ArxivAdapter:
         )
 
         async with get_http_client(
-            timeout=settings.http.timeout,
-            headers={"Accept": "application/atom+xml"},
+            headers={
+                "Accept": (
+                    "application/atom+xml"
+                )
+            }
         ) as client:
 
-            response = await client.get(url)
+            response = await client.get(
+                url
+            )
+
             response.raise_for_status()
 
             return response.text
@@ -116,30 +141,44 @@ class ArxivAdapter:
         query: str,
     ) -> tuple[list[Paper], int]:
 
-        root = ET.fromstring(xml_text)
+        root = ET.fromstring(
+            xml_text
+        )
 
         entries = root.findall(
             f"{{{ATOM_NS}}}entry"
         )
 
-        papers: list[Paper] = []
+        papers = []
 
         for entry in entries:
+
             try:
-                paper = self._parse_entry(
-                    entry=entry,
-                    query=query,
+
+                paper = (
+                    self._parse_entry(
+                        entry=entry,
+                        query=query,
+                    )
                 )
 
                 if paper:
-                    papers.append(paper)
+                    papers.append(
+                        paper
+                    )
 
             except Exception:
+
                 logger.exception(
-                    "Failed to parse arXiv entry"
+                    "Failed parsing "
+                    "arXiv entry"
                 )
 
-        total_found = self._extract_total_results(root)
+        total_found = (
+            self._extract_total_results(
+                root
+            )
+        )
 
         return papers, total_found
 
@@ -150,32 +189,56 @@ class ArxivAdapter:
     ) -> Optional[Paper]:
 
         title = self._clean_text(
-            self._get_text(entry, "title")
+            self._get_text(
+                entry,
+                "title",
+            )
         )
 
         if not title:
             return None
 
         abstract = self._clean_text(
-            self._get_text(entry, "summary")
+            self._get_text(
+                entry,
+                "summary",
+            )
         )
 
-        arxiv_id = self._extract_arxiv_id(entry)
-
-        publication_date = self._get_text(
-            entry,
-            "published",
+        arxiv_id = (
+            self._extract_arxiv_id(
+                entry
+            )
         )
 
-        year = self._extract_year(
-            publication_date
+        publication_date = (
+            self._get_text(
+                entry,
+                "published",
+            )
         )
 
-        doi = self._extract_doi(entry)
+        year = (
+            self._extract_year(
+                publication_date
+            )
+        )
 
-        authors = self._extract_authors(entry)
+        doi = self._extract_doi(
+            entry
+        )
 
-        fields_of_study = self._extract_fields(entry)
+        authors = (
+            self._extract_authors(
+                entry
+            )
+        )
+
+        fields_of_study = (
+            self._extract_fields(
+                entry
+            )
+        )
 
         pdf_url, landing_page_url = (
             self._extract_urls(
@@ -200,12 +263,18 @@ class ArxivAdapter:
                 else None
             ),
             fields_of_study=(
-                fields_of_study[:MAX_FIELDS_OF_STUDY]
+                fields_of_study[
+                    :MAX_FIELDS_OF_STUDY
+                ]
             ),
             pdf_url=pdf_url,
-            landing_page_url=landing_page_url,
+            landing_page_url=(
+                landing_page_url
+            ),
             is_open_access=True,
-            retrieved_from_queries=[query],
+            retrieved_from_queries=[
+                query
+            ],
         )
 
     def _get_text(
@@ -219,54 +288,62 @@ class ArxivAdapter:
             f"{{{namespace}}}{tag}"
         )
 
-        if child is None or not child.text:
+        if (
+            child is None
+            or not child.text
+        ):
             return ""
 
         return child.text.strip()
 
     @staticmethod
-    def _clean_text(value: str) -> str:
-        return value.replace("\n", " ").strip()
+    def _clean_text(
+        value: str,
+    ) -> str:
+
+        return (
+            value
+            .replace("\n", " ")
+            .strip()
+        )
 
     def _extract_arxiv_id(
         self,
         entry: ET.Element,
     ) -> Optional[str]:
 
-        raw_id = self._get_text(entry, "id")
-
-        match = re.search(
-            r"arxiv\.org/abs/([^\s]+)",
-            raw_id,
+        raw_id = self._get_text(
+            entry,
+            "id",
         )
 
-        if not match:
+        if not raw_id:
             return None
 
-        return re.sub(
-            r"v\d+$",
-            "",
-            match.group(1),
+        if "/abs/" not in raw_id:
+            return None
+
+        arxiv_id = (
+            raw_id.split("/abs/")[-1]
         )
+
+        return arxiv_id.split("v")[0]
 
     @staticmethod
     def _extract_year(
-        published_date: str,
+        publication_date: str,
     ) -> Optional[int]:
 
-        if not published_date:
+        if not publication_date:
             return None
 
-        match = re.match(
-            r"(\d{4})",
-            published_date,
-        )
+        try:
+            return int(
+                publication_date[:4]
+            )
 
-        return (
-            int(match.group(1))
-            if match
-            else None
-        )
+        except Exception:
+            return None
 
     def _extract_doi(
         self,
@@ -296,17 +373,23 @@ class ArxivAdapter:
             f"{{{ATOM_NS}}}author"
         ):
 
-            name_element = author_element.find(
-                f"{{{ATOM_NS}}}name"
+            name_element = (
+                author_element.find(
+                    f"{{{ATOM_NS}}}name"
+                )
             )
 
             if (
                 name_element is not None
                 and name_element.text
             ):
+
                 authors.append(
                     Author(
-                        name=name_element.text.strip()
+                        name=(
+                            name_element.text
+                            .strip()
+                        )
                     )
                 )
 
@@ -323,7 +406,9 @@ class ArxivAdapter:
             f"{{{ATOM_NS}}}category"
         ):
 
-            term = category.get("term")
+            term = category.get(
+                "term"
+            )
 
             if term:
                 fields.append(term)
@@ -334,7 +419,10 @@ class ArxivAdapter:
         self,
         entry: ET.Element,
         arxiv_id: Optional[str],
-    ) -> tuple[Optional[str], Optional[str]]:
+    ) -> tuple[
+        Optional[str],
+        Optional[str],
+    ]:
 
         pdf_url = None
         landing_url = None
@@ -343,33 +431,47 @@ class ArxivAdapter:
             f"{{{ATOM_NS}}}link"
         ):
 
-            rel = link.get("rel", "")
-            href = link.get("href", "")
+            rel = link.get(
+                "rel",
+                "",
+            )
+
+            href = link.get(
+                "href",
+                "",
+            )
 
             if (
                 link.get("type")
                 == "application/pdf"
             ):
+
                 pdf_url = href
 
             elif rel == "alternate":
+
                 landing_url = href
 
         if arxiv_id:
 
             if not pdf_url:
+
                 pdf_url = (
                     f"https://arxiv.org/pdf/"
                     f"{arxiv_id}.pdf"
                 )
 
             if not landing_url:
+
                 landing_url = (
                     f"https://arxiv.org/abs/"
                     f"{arxiv_id}"
                 )
 
-        return pdf_url, landing_url
+        return (
+            pdf_url,
+            landing_url,
+        )
 
     @staticmethod
     def _extract_total_results(
@@ -377,7 +479,8 @@ class ArxivAdapter:
     ) -> int:
 
         total_element = root.find(
-            f"{{{OPENSEARCH_NS}}}totalResults"
+            f"{{{OPENSEARCH_NS}}}"
+            f"totalResults"
         )
 
         if (
@@ -387,11 +490,15 @@ class ArxivAdapter:
             return 0
 
         try:
-            return int(total_element.text)
-
-        except ValueError:
-            logger.warning(
-                "Invalid totalResults value='%s'",
-                total_element.text,
+            return int(
+                total_element.text
             )
+
+        except Exception:
+
+            logger.warning(
+                "Invalid arXiv "
+                "totalResults value"
+            )
+
             return 0

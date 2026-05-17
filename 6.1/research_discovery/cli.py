@@ -21,7 +21,7 @@ from research_discovery.models.paper import (
     DiscoveryResult,
     Paper,
 )
-from research_discovery.services.storage.service import (
+from research_discovery.services.storage.json_store import (
     JSONStorageService,
 )
 

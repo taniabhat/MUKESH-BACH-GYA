@@ -50,7 +50,7 @@ class LLMConfig:
     model: str = field(
         default_factory=lambda: os.getenv(
             "LLM_MODEL",
-            "Qwen/Qwen3-32B",
+            "",
         )
     )
 
@@ -160,7 +160,7 @@ class SemanticScholarConfig:
         )
     )
 
-    rps_limit: int = 5
+    rps_limit: int = 1
 
 
 @dataclass

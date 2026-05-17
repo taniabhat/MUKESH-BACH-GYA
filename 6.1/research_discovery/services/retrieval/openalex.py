@@ -1,5 +1,5 @@
 """
-OpenAlex API Adapter — Primary retrieval backend.
+OpenAlex retrieval adapter.
 """
 
 from __future__ import annotations
@@ -8,7 +8,9 @@ import re
 import urllib.parse
 from typing import Optional
 
-from research_discovery.config.settings import settings
+from research_discovery.config.settings import (
+    settings,
+)
 from research_discovery.core.runtime import (
     api_retry,
     get_http_client,
@@ -26,16 +28,22 @@ from research_discovery.models.paper import (
 logger = get_logger(__name__)
 
 BASE_URL = settings.openalex.base_url
+
 EMAIL = settings.openalex.email
 
 MAX_REFERENCES = 50
+
 MAX_FIELDS_OF_STUDY = 10
+
 MAX_KEYWORDS = 20
+
 CONCEPT_SCORE_THRESHOLD = 0.4
 
 
 class OpenAlexAdapter:
-    """Primary OpenAlex retrieval adapter."""
+    """
+    Primary OpenAlex retrieval adapter.
+    """
 
     def __init__(self):
 
@@ -48,35 +56,48 @@ class OpenAlexAdapter:
     async def search(
         self,
         query: str,
-        per_page: int = 25,
-        filter_str: Optional[str] = None,
+        limit: int = 20,
+        filter_str: Optional[
+            str
+        ] = None,
     ) -> SearchResult:
 
         params = {
             **self.default_params,
             "search": query,
-            "per-page": per_page,
-            "select": (
-                "id,title,abstract,authorships,"
-                "publication_year,publication_date,"
-                "doi,open_access,locations,"
-                "primary_location,cited_by_count,"
-                "referenced_works,concepts,"
-                "keywords,landing_page_url"
+            "per-page": limit,
+                        "select": (
+                "id,"
+                "title,"
+                "abstract_inverted_index,"
+                "authorships,"
+                "publication_year,"
+                "publication_date,"
+                "doi,"
+                "open_access,"
+                "locations,"
+                "primary_location,"
+                "cited_by_count,"
+                "referenced_works,"
+                "concepts"
             ),
         }
 
         if filter_str:
-            params["filter"] = filter_str
+
+            params["filter"] = (
+                filter_str
+            )
 
         try:
+
             data = await self._fetch_json(
                 f"{self.base_url}/works",
                 params=params,
             )
 
             papers = self._parse_results(
-                data,
+                data=data,
                 query=query,
             )
 
@@ -86,7 +107,9 @@ class OpenAlexAdapter:
             )
 
             logger.info(
-                "OpenAlex query='%s' fetched=%s total=%s",
+                "OpenAlex retrieved "
+                "query='%s' papers=%s "
+                "total=%s",
                 query,
                 len(papers),
                 total_found,
@@ -99,9 +122,11 @@ class OpenAlexAdapter:
                 total_found=total_found,
             )
 
-        except Exception:
+        except Exception as exc:
+
             logger.exception(
-                "OpenAlex search failed query='%s'",
+                "OpenAlex search failed "
+                "query='%s'",
                 query,
             )
 
@@ -110,6 +135,7 @@ class OpenAlexAdapter:
                 query=query,
                 papers=[],
                 total_found=0,
+                error=str(exc),
             )
 
     async def fetch_by_doi(
@@ -118,44 +144,41 @@ class OpenAlexAdapter:
     ) -> Optional[Paper]:
 
         try:
-            encoded_doi = urllib.parse.quote(
-                doi,
-                safe="",
+
+            encoded_doi = (
+                urllib.parse.quote(
+                    doi,
+                    safe="",
+                )
             )
 
             url = (
                 f"{self.base_url}/works/"
-                f"https://doi.org/{encoded_doi}"
+                f"https://doi.org/"
+                f"{encoded_doi}"
             )
 
             raw = await self._fetch_json(
-                url,
-                params=self.default_params,
+                url=url,
+                params=(
+                    self.default_params
+                ),
             )
 
             return self._parse_paper(
-                raw,
+                raw=raw,
                 query=f"doi:{doi}",
             )
 
         except Exception:
+
             logger.exception(
-                "OpenAlex DOI fetch failed doi='%s'",
+                "OpenAlex DOI fetch failed "
+                "doi='%s'",
                 doi,
             )
 
             return None
-
-    async def fetch_citations(
-        self,
-        openalex_id: str,
-    ) -> list[Paper]:
-
-        return await self._fetch_related_papers(
-            openalex_id=openalex_id,
-            filter_key="cites",
-            query_prefix="citation_expansion",
-        )
 
     async def fetch_references(
         self,
@@ -164,8 +187,19 @@ class OpenAlexAdapter:
 
         return await self._fetch_related_papers(
             openalex_id=openalex_id,
-            filter_key="cited_by",
+            filter_key="cites",
             query_prefix="reference_expansion",
+        )
+
+    async def fetch_citations(
+        self,
+        openalex_id: str,
+    ) -> list[Paper]:
+
+        return await self._fetch_related_papers(
+            openalex_id=openalex_id,
+            filter_key="cited_by",
+            query_prefix="citation_expansion",
         )
 
     async def _fetch_related_papers(
@@ -175,38 +209,53 @@ class OpenAlexAdapter:
         query_prefix: str,
     ) -> list[Paper]:
 
-        clean_id = self._clean_openalex_id(
-            openalex_id,
+        clean_id = (
+            self._clean_openalex_id(
+                openalex_id
+            )
         )
 
         params = {
             **self.default_params,
             "filter": (
-                f"{filter_key}:{clean_id}"
+                f"{filter_key}:"
+                f"{clean_id}"
             ),
             "per-page": 50,
-            "select": (
-                "id,title,abstract,"
+                        "select": (
+                "id,"
+                "title,"
+                "abstract_inverted_index,"
                 "authorships,"
                 "publication_year,"
-                "doi,cited_by_count"
+                "publication_date,"
+                "doi,"
+                "open_access,"
+                "locations,"
+                "primary_location,"
+                "cited_by_count,"
+                "referenced_works,"
+                "concepts"
             ),
         }
 
         try:
+
             data = await self._fetch_json(
                 f"{self.base_url}/works",
                 params=params,
             )
 
             papers = self._parse_results(
-                data,
+                data=data,
                 query=(
-                    f"{query_prefix}:{clean_id}"
+                    f"{query_prefix}:"
+                    f"{clean_id}"
                 ),
             )
 
             for paper in papers:
+
                 paper.source = (
                     PaperSource.CITATION_EXPANSION
                 )
@@ -214,22 +263,28 @@ class OpenAlexAdapter:
             return papers
 
         except Exception:
+
             logger.exception(
-                "OpenAlex related paper fetch failed"
+                "OpenAlex related paper "
+                "fetch failed"
             )
 
             return []
 
-    @api_retry(max_attempts=settings.openalex.max_retries)
+    @api_retry(
+        max_attempts=(
+            settings.openalex.max_retries
+        )
+    )
     async def _fetch_json(
         self,
         url: str,
-        params: Optional[dict] = None,
+        params: Optional[
+            dict
+        ] = None,
     ) -> dict:
 
-        async with get_http_client(
-            timeout=settings.http.timeout,
-        ) as client:
+        async with get_http_client() as client:
 
             response = await client.get(
                 url,
@@ -248,20 +303,29 @@ class OpenAlexAdapter:
 
         papers = []
 
-        for raw in data.get("results", []):
+        for raw in data.get(
+            "results",
+            [],
+        ):
 
             try:
+
                 paper = self._parse_paper(
-                    raw,
+                    raw=raw,
                     query=query,
                 )
 
                 if paper:
-                    papers.append(paper)
+
+                    papers.append(
+                        paper
+                    )
 
             except Exception:
+
                 logger.exception(
-                    "Failed to parse OpenAlex paper"
+                    "Failed parsing "
+                    "OpenAlex paper"
                 )
 
         return papers
@@ -272,19 +336,39 @@ class OpenAlexAdapter:
         query: str,
     ) -> Optional[Paper]:
 
-        title = self._extract_title(raw)
+        title = self._extract_title(
+            raw
+        )
 
         if not title:
             return None
 
         return Paper(
             source=PaperSource.OPENALEX,
-            external_ids=self._extract_external_ids(raw),
+            external_ids=(
+                self._extract_external_ids(
+                    raw
+                )
+            ),
             title=title,
-            abstract=raw.get("abstract"),
-            authors=self._extract_authors(raw),
-            year=raw.get("publication_year"),
-            venue=self._extract_venue(raw),
+            abstract=(
+                self._extract_abstract(
+                    raw
+                )
+            ),
+            authors=(
+                self._extract_authors(
+                    raw
+                )
+            ),
+            year=raw.get(
+                "publication_year"
+            ),
+            venue=(
+                self._extract_venue(
+                    raw
+                )
+            ),
             publication_date=raw.get(
                 "publication_date"
             ),
@@ -299,23 +383,36 @@ class OpenAlexAdapter:
                 )
             ),
             fields_of_study=(
-                self._extract_fields(raw)
+                self._extract_fields(
+                    raw
+                )
             ),
             keywords=(
-                raw.get(
-                    "keywords",
-                    [],
-                )[:MAX_KEYWORDS]
+                self._extract_keywords(
+                    raw
+                )
             ),
-            pdf_url=self._extract_pdf_url(raw),
+            pdf_url=(
+                self._extract_pdf_url(
+                    raw
+                )
+            ),
             landing_page_url=raw.get(
                 "landing_page_url"
             ),
             is_open_access=(
-                self._extract_oa_status(raw)
+                self._extract_oa_status(
+                    raw
+                )
             ),
-            references=self._extract_references(raw),
-            retrieved_from_queries=[query],
+            references=(
+                self._extract_references(
+                    raw
+                )
+            ),
+            retrieved_from_queries=[
+                query
+            ],
         )
 
     @staticmethod
@@ -338,7 +435,11 @@ class OpenAlexAdapter:
             doi=self._normalize_doi(
                 raw.get("doi")
             ),
-            arxiv=self._extract_arxiv_id(raw),
+            arxiv=(
+                self._extract_arxiv_id(
+                    raw
+                )
+            ),
             openalex=raw.get("id"),
         )
 
@@ -376,30 +477,21 @@ class OpenAlexAdapter:
             [],
         ):
 
-            source = (
-                location.get("source")
-                or {}
-            )
-
-            lineage = source.get(
-                "host_organization_lineage_names",
-                [],
-            )
-
-            if "arxiv" not in lineage:
-                continue
-
-            url = location.get(
-                "landing_page_url",
-                "",
+            landing_url = (
+                location.get(
+                    "landing_page_url",
+                    ""
+                )
             )
 
             match = re.search(
-                r"arxiv\.org/abs/([0-9.]+)",
-                url,
+                r"arxiv\.org/abs/"
+                r"([0-9.]+)",
+                landing_url,
             )
 
             if match:
+
                 return match.group(1)
 
         return None
@@ -417,13 +509,17 @@ class OpenAlexAdapter:
         ):
 
             author_data = (
-                authorship.get("author")
+                authorship.get(
+                    "author"
+                )
                 or {}
             )
 
-            institutions = authorship.get(
-                "institutions",
-                [],
+            institutions = (
+                authorship.get(
+                    "institutions",
+                    [],
+                )
             )
 
             affiliation = (
@@ -440,10 +536,14 @@ class OpenAlexAdapter:
                         "display_name",
                         "Unknown",
                     ),
-                    author_id=author_data.get(
-                        "id"
+                    author_id=(
+                        author_data.get(
+                            "id"
+                        )
                     ),
-                    affiliation=affiliation,
+                    affiliation=(
+                        affiliation
+                    ),
                 )
             )
 
@@ -455,16 +555,22 @@ class OpenAlexAdapter:
     ) -> Optional[str]:
 
         primary_location = (
-            raw.get("primary_location")
+            raw.get(
+                "primary_location"
+            )
             or {}
         )
 
         source = (
-            primary_location.get("source")
+            primary_location.get(
+                "source"
+            )
             or {}
         )
 
-        return source.get("display_name")
+        return source.get(
+            "display_name"
+        )
 
     def _extract_fields(
         self,
@@ -479,19 +585,70 @@ class OpenAlexAdapter:
         ):
 
             if (
-                concept.get("score", 0)
+                concept.get(
+                    "score",
+                    0,
+                )
                 <= CONCEPT_SCORE_THRESHOLD
             ):
+
                 continue
 
-            display_name = concept.get(
-                "display_name"
+            display_name = (
+                concept.get(
+                    "display_name"
+                )
             )
 
             if display_name:
-                fields.append(display_name)
 
-        return fields[:MAX_FIELDS_OF_STUDY]
+                fields.append(
+                    display_name
+                )
+
+        return fields[
+            :MAX_FIELDS_OF_STUDY
+        ]
+
+    def _extract_keywords(
+        self,
+        raw: dict,
+    ) -> list[str]:
+
+        keywords = []
+
+        for keyword in raw.get(
+            "keywords",
+            [],
+        ):
+
+            if isinstance(
+                keyword,
+                dict,
+            ):
+
+                value = (
+                    keyword.get(
+                        "display_name"
+                    )
+                    or keyword.get(
+                        "keyword"
+                    )
+                )
+
+            else:
+
+                value = str(keyword)
+
+            if value:
+
+                keywords.append(
+                    value
+                )
+
+        return keywords[
+            :MAX_KEYWORDS
+        ]
 
     @staticmethod
     def _extract_pdf_url(
@@ -505,9 +662,14 @@ class OpenAlexAdapter:
 
             if (
                 location.get("is_oa")
-                and location.get("pdf_url")
+                and location.get(
+                    "pdf_url"
+                )
             ):
-                return location["pdf_url"]
+
+                return location[
+                    "pdf_url"
+                ]
 
         return None
 
@@ -517,7 +679,9 @@ class OpenAlexAdapter:
     ) -> bool:
 
         open_access = (
-            raw.get("open_access")
+            raw.get(
+                "open_access"
+            )
             or {}
         )
 
@@ -540,11 +704,46 @@ class OpenAlexAdapter:
 
             references.append(
                 PaperReference(
-                    openalex_id=reference_id
+                    openalex_id=(
+                        reference_id
+                    )
                 )
             )
 
         return references
+
+    @staticmethod
+    def _extract_abstract(
+        raw: dict,
+    ) -> Optional[str]:
+
+        inverted_index = raw.get(
+            "abstract_inverted_index"
+        )
+
+        if not inverted_index:
+            return None
+
+        positions = {}
+
+        for word, indexes in (
+            inverted_index.items()
+        ):
+
+            for index in indexes:
+
+                positions[index] = word
+
+        ordered_words = [
+            positions[i]
+            for i in sorted(
+                positions
+            )
+        ]
+
+        return " ".join(
+            ordered_words
+        )
 
     @staticmethod
     def _clean_openalex_id(
