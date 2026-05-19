@@ -1,0 +1,39 @@
+# ============================================================
+#  6.3 Multimodal RAG Engine — Additional Dependencies
+#  Install AFTER base requirements.txt from 6.2
+#  Python 3.10 / 3.11
+# ============================================================
+
+# ── Vector database ──────────────────────────────────────────
+qdrant-client==1.9.1
+
+# ── Text embeddings (BGE-M3, 1024-dim) ──────────────────────
+FlagEmbedding==1.2.10          # BGE-M3 + BGE Reranker v2
+sentence-transformers==3.0.1   # already in 6.2 requirements
+
+# ── Vision embeddings (SigLIP / CLIP, 768-dim) ──────────────
+transformers==4.41.1           # already in 6.2
+Pillow==10.3.0                 # already in 6.2
+open-clip-torch==2.24.0        # OpenCLIP — SigLIP weights via HF
+
+# ── Code embeddings (CodeBERT, 768-dim) ─────────────────────
+# Uses transformers — no extra install needed
+
+# ── Sparse / BM25 retrieval ──────────────────────────────────
+rank-bm25==0.2.2               # pure-Python BM25 implementation
+
+# ── Citation graph (Neo4j) ───────────────────────────────────
+neo4j==5.20.0                  # official Neo4j Python driver
+
+# ── Reranking ────────────────────────────────────────────────
+# FlagEmbedding above includes BGE Reranker v2
+
+# ── Context compression ──────────────────────────────────────
+tiktoken==0.7.0                # token counting (OpenAI-compatible)
+
+# ── Utilities ────────────────────────────────────────────────
+numpy==1.26.4                  # already in 6.2
+tqdm==4.66.4                   # already in 6.2
+loguru==0.7.2                  # already in 6.2
+pydantic==2.7.1                # already in 6.2
+orjson==3.10.3                 # already in 6.2

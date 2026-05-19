@@ -1,0 +1,45 @@
+# ============================================================
+#  Document Intelligence Engine — Python Dependencies
+#  Python 3.10 / 3.11 recommended
+# ============================================================
+
+# ── Stage 1: Infrastructure / HTTP ──────────────────────────
+requests==2.31.0
+python-dotenv==1.0.1
+
+# ── Stage 2: GROBID client & PDF baseline ───────────────────
+grobid-client-python==0.1.4     # official GROBID Python client
+PyMuPDF==1.24.2                 # fitz – fast PDF text + page render
+pdfminer.six==20231228          # pure-Python text-layer fallback
+
+# ── Stage 2: OCR fallback (scanned PDFs) ────────────────────
+paddlepaddle==2.6.2            # PaddlePaddle CPU build
+paddleocr==2.7.3
+layoutparser==0.3.4
+Pillow==10.3.0
+opencv-python-headless==4.9.0.80   # headless avoids libGL issues in Docker
+
+# ── Stage 3: Table extraction ───────────────────────────────
+camelot-py==0.11.0          # [cv] pulls ghostscript + opencv bindings
+ghostscript==0.7                # Python wrapper (binary must be on PATH)
+
+# ── Stage 3: Image / figure work ────────────────────────────
+# PyMuPDF already listed above
+
+# ── Stage 3: Equation detection ─────────────────────────────
+regex==2024.4.28                 # faster, more powerful re replacement
+
+# ── Stage 4: Semantic chunking & orchestration ──────────────
+langchain==0.2.1
+langchain-community==0.2.1
+sentence-transformers==3.0.1
+transformers==4.41.1
+torch==2.3.0                    # CPU-only; swap for cu121 wheel if GPU
+numpy==1.26.4
+scipy==1.13.0
+
+# ── Output & utilities ──────────────────────────────────────
+pydantic==2.7.1                 # schema validation for final JSON
+orjson==3.10.3                  # fast JSON serialise / deserialise
+tqdm==4.66.4
+loguru==0.7.2

@@ -1,0 +1,73 @@
+version: "3.9"
+
+# ── Document Intelligence Engine — Full Stack ──────────────────────────────────
+# Services:
+#   grobid  — academic PDF parser     → http://localhost:8070
+#   qdrant  — vector database         → http://localhost:6333
+#   neo4j   — citation graph DB       → http://localhost:7474 (browser)
+#                                        bolt://localhost:7687 (driver)
+
+services:
+
+  grobid:
+    image: lfoppiano/grobid:0.8.0
+    container_name: grobid
+    ports:
+      - "8070:8070"
+      - "8071:8071"
+    environment:
+      - JAVA_OPTS=-Xmx4g -Xms1g
+    volumes:
+      - grobid_tmp:/opt/grobid/tmp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8070/api/isalive"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  neo4j:
+    image: neo4j:5.19-community
+    container_name: neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    environment:
+      - NEO4J_AUTH=neo4j/research123
+      - NEO4J_dbms_memory_heap_max__size=2G
+      - NEO4J_dbms_memory_pagecache_size=1G
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+volumes:
+  grobid_tmp:
+  qdrant_storage:
+  neo4j_data:
+  neo4j_logs:

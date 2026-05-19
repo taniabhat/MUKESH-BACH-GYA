@@ -1,0 +1,1294 @@
+{
+  "paper_id": "14e9b8d1-86db-4edd-a265-c85887073324",
+  "title": "",
+  "abstract": "",
+  "sections": [
+    {
+      "heading": "A. PROBLEM ADDRESSES BY THE INVENTION:",
+      "body": "The tradi onal sta c or pre-defined vocabulary with which NPCs are programmed in digital games and simula ons has some severe drawbacks that typically prevent them from engaging in meaningful interac ons with the player.\n\nEven the current systems that a empt to use very elementary NLP or decision trees for this purpose are usually rather narrow or irrelevant because of their scope.\n\nThis inven on removes the gaps by proposing a conversa onal AI system that creates dynamic and contextually relevant dialogues for NPCs, thereby making their interac ons more believable and versa le.\n\n1.\n\nSta c NPC Responses: Tradi onal NPCs rely on pre-defined dialogue trees or scripted responses, which limit the depth and realism of player interac on.\n\n2.\n\nLack of Context-awareness: All the systems currently developed fail to account for the game environment that is beyond the scene, everything that the player does, as well as each in-game factor while crea ng responses from the non-player characters.\n\n3.\n\nS ff Personality and Emo on Models: In reality, these systems of the non-player characters are incapable of presen ng different personali es and dynamic emo onal states, resul ng in interac ons that are repe ve and predictable.\n\n4.\n\nImmersion Breakdowns: Sta c and unresponsive dialogues from a non-player character break the immersion caused for the players and lower the engagement and enjoyment.\n\n5.",
+      "chunk_id": "a3b78f75-9505-5705-9121-d0cc7e887c6b"
+    },
+    {
+      "heading": "A. PROBLEM ADDRESSES BY THE INVENTION:",
+      "body": "s: Sta c and unresponsive dialogues from a non-player character break the immersion caused for the players and lower the engagement and enjoyment.\n\n5.\n\nWeak Procedural Genera on: The procedural contents that the current NLP gaming systems manage to generate are limited, as these end up represen ng contextually suitable and narra vely coherent dialogue in rare instances.",
+      "chunk_id": "e3a04f78-e2af-588d-9f31-b1d2caae0769"
+    },
+    {
+      "heading": "B. PURPOSE BEHIND THIS INVENTION:",
+      "body": "The was mainly invented to overcome the restraints in the standard NPC systems by making a design of conversa onal AI framework to make NPCs which: 1. Has a dynamical and human-like design, respond to player inputs and game context. 2. Has a unique, personality-based behavior and also emo onal variability 3. Retains narra ve consistency while permi ng procedural genera on of dialogue 4. Generates be er user immersion with engagement as simula on of real human-like conversa ons 5. Adapts to real-me environmental factors and in-game events.",
+      "chunk_id": "b6ccbc34-35b4-5bbf-a27c-3361d5368909"
+    },
+    {
+      "heading": "C. STATE OF THE ART/RESEARCH GAP/NOVELTY:",
+      "body": "There lacks current NPC dialogue systems that typically depend on toy decision trees and sta c scrip ng or basic forms of NLP techniques. While models, as is the case with some GPT-based models, come out, they are s ll not common in game environments because those have high computa onal complexity, lack contextual depth, and cannot model emo onal ac vi es.\n\nCurrent AI-based NPCs in games o en fail to achieve acceptable amounts of both flexibility and consistency, thereby resul ng in nonsensical speech or immersion-breaking responses.\n\n1. Lack of integra on of dynamic emo onal modeling, personality-driven dialogues, and real-me context awareness. 2. Weakness in the procedural genera on of dialogue in narra ve tone and player ac ons. 3. Not acquiring meaningful mul -turn dialogue while avoiding immersion issues as well as errors. The innova on develops: -A layered architecture of conversa onal features, which encompass NLP, contextual awareness,emo onal modeling, and procedural genera on.\n\n-Dynamic NPC dialogue updated on the basis of environmental factors, player inputs, and personality traits.\n\n-The ability to preserve narra ve coherence and at the same me offer flexible interac vity is crucial, giving a sense of life to these NPCs.",
+      "chunk_id": "8dac19ab-5e1f-58de-8c3e-35b4cfedce15"
+    },
+    {
+      "heading": "D. DETAILED DESCRIPTION:",
+      "body": "1. System Architecture The system consists of the following components: 1.1 Dialogue Manager The Dialogue Manager is the central component in the flow of control of conversa ons and coherent dialogue interac ons between: • Dialog State Tracker: Tracks the state of a current dialogue, so that NPCs can remember and recall previous interac ons and refer to them appropriately.\n\n• Intent Recogni on Module: It connects the input in natural language by the player to recognize the intent hence, the meaning or purpose of an interac on being intended by the NPC.",
+      "chunk_id": "b876651d-08a7-5996-a084-a0af6e62a7d9"
+    },
+    {
+      "heading": "Contextual Awareness Module",
+      "body": "This module makes the NPCs interac ve by being contextually relevant by understanding • Environmental Context: Loca on, me and happening in game.\n\n• Player Ac ons: What the player has been doing recently and historically, that affects how the NPC perceives.\n\n• Interac ons with Other NPCs: Inter-NPCs rela onships and ac vi es that may interfere with the dialogue.",
+      "chunk_id": "e649e2fc-52d1-50a6-b3be-c7e087478278"
+    },
+    {
+      "heading": "Emo on and Personality Engine",
+      "body": "This engine provides every NPC with their own personality profile and emo onal model, allowing the NPCs to: •Respond emo onally to player ac ons, in-game events, or dialogue.\n\n•Exhibit consistent personality traits: friendly, hos le, sarcas c, and more.\n\n•Display dynamic emo onal states; happy, angry, fearful-whilst poten ally affec ng the tone for dialogue and the behavior. 1.4 Adap ve Response Generator This module is accountable for the genera on of real-me, contextually relevant dialogue: •Language Genera on Models: Leveraging the sophis cated NLP models to give responses that sound natural.\n\n•Response Filtering: This means that the responses produced are in line with the tone of the game's narra ve and that of the personality traits of the NPC.",
+      "chunk_id": "0a7e077e-2201-530c-8a6c-d6fb195afeb9"
+    },
+    {
+      "heading": "How it Works:",
+      "body": "2.1.Input by the Player: The player starts the interac on by producing a natural language input. 2.2.Intent Recogni on: The system a empts to recognize the input through the natural language of the player in the Intent Recogni on Module. 2.3.Context Analysis: The Contextual Awareness Module analyzes the context of the in-game environment, the ac ons of the player, and how the NPCs correlate. 2.4. Emo on and Personality Adjustment: The response of the NPC is determined by personality traits, as well as its emo on at this moment. 2.5. Genera on of Dialogue: Adap ve Response Generator design response to this context, emo on, and overall narra ve tone 2.6. Output Delivery: The NPC delivers their response to the player in a natural and contextually appropriate fashion.",
+      "chunk_id": "ffdfb38a-31d7-5f07-b56a-cfb4d5314ef6"
+    },
+    {
+      "heading": "E. RESULTS AND BENEFITS:",
+      "body": "Rules 1.Answers should be contextual, relevant to the story of the game and environment. 2.NPC's responses must be an image of emo onal characteris cs, and personali es. 3.The environmental context and player history of every NPC should have an effect on their dialogue. 4.Answers should be gramma cally correct and relevant to the input.",
+      "chunk_id": "156a937e-7a65-5144-a0a2-e5443e07f122"
+    },
+    {
+      "heading": "Benefits:",
+      "body": "1.The reac ons of the NPCs depend on the player's input in real-me and increase the sense of immersion. 2. The NPCs react emo onally, life-like, and hence, become alive. 3. All NPCs shall portray unique behaviors in lines with set personality a ributes . 4. This system creates endless possibili es within the dialogue stream resul ng in a repe ve-free very replayable system. 5. Bearing in mind their knowledge of game context, the responses from the NPCs will appropriately reflect relevance and meaning.",
+      "chunk_id": "215234dc-33d2-5e90-b0ee-35e3d0095606"
+    },
+    {
+      "heading": "Benefits:",
+      "body": "y replayable system. 5. Bearing in mind their knowledge of game context, the responses from the NPCs will appropriately reflect relevance and meaning.\n\nOur Claims are: 1. A conversa onal AI system for non-playable characters comprises of: o Discussion Manager that carries out the management of how a discourse flow takes place by determining the player's intent. o Contextual Awareness Module to include in-game context and what the player has done. o Emo on and Personality Engine to generate dynamic responses that are personality-driven. o Adap ve Response Generator with the use of natural language processing in order to generate dialogue in real-me. 2. The system of claim 1, wherein the Dialogue Manager includes an Intent Recogni on Module for recognizing player intents from any input in natural language. 3. The system of claim 1, wherein the Contextual Awareness Module modulates NPC responses in accordance with actual environmental factors and condi ons and interac ons among NPCs. 4. The system of claim 1, wherein the Emo on and Personality Engine furnishes emo onal states and personality traits of NPCs to the effect that their dialogue responses are impacted thereby. 5. The system of claim 1, wherein the Adap ve Response Generator relies on procedural ways to construct responses that should fit into the plot and tone of the game.",
+      "chunk_id": "1373b426-7442-5b61-a240-ef28b54bd155"
+    },
+    {
+      "heading": "Benefits:",
+      "body": "f claim 1, wherein the Adap ve Response Generator relies on procedural ways to construct responses that should fit into the plot and tone of the game.\n\n6. System for presen ng adap vely interac ve dialogue with NPCs as reac on to player input in natural language input comprising: -Receiving natural language input from the player.",
+      "chunk_id": "4082d10f-ff1f-5a53-b94a-0a6a0591f59c"
+    },
+    {
+      "heading": "H. EXISTING DATA:",
+      "body": "There ought to be clinical or compara ve data that demonstrate measurable improvements in the interac vity of the NPC, the engagement of the player, and system effec veness to support the inven on and validate its value. Some of the possible compara ve that may be collected to give strength to the inven on is described as follows:\n\n1. Design of Compara ve Data: The objec ve is to compare the proposed AI-based conversa onal system with tradi onal NPC dialogue systems and focus will be given on parameters like engagement, realism, emo onal depth, and adaptability.\n\nComparison Systems: 1. Tradi onal dialogue trees or scripted NPC systems. a. 2. Simple NLP-based systems using predefined intents or responses (e.g., chatbot-like implementa ons). 3. Advanced contextual, emo onal, and procedurally generated conversa onal AI. E. Procedural Dialogue Genera on Repeat Lines Sta s cs: Monitor the frequency of repeated lines in the dialogue during long gaming sessions. Dialogue Uniqueness: Measure the non-repeatedness of the dialogue generated in the same type of ingame situa on.\n\nA group of 100-200 par cipants with varied gaming experience.\n\nDevelop a controlled environment (e.g., a small sandbox game or RPG simula on) where players interact with NPCs.\n\nDivide par cipants into three groups, each exposed to one of the three NPC systems (baseline, exis ng AI, and proposed AI).\n\nAllow players to engage with NPCs naturally during gameplay.",
+      "chunk_id": "28759bdf-b2df-54dc-8384-13525e1fc7f2"
+    },
+    {
+      "heading": "Dura on",
+      "body": "2-4 hours of gameplay per par cipant, followed by feedback collec on.",
+      "chunk_id": "ea59b94e-0431-52bb-9b69-0900902d90d9"
+    },
+    {
+      "heading": "5.Clinical Valida on",
+      "body": "While the device is not clinical by itself, indirect valida on may be based on experiments on immersive user experiences. Methods are:\n\n-Recording player physiological responses, for example, heart rate or skin conductance when engaged in interac ve ac vi es for measuring immersion.\n\n-Neuroimaging in func onal fMRI/EEG while playing the game to analyze cogni ve and emo onal involvements.\n\n6. Interpreta on from these data: a.\n\n1. Engagement and Realism: the proposed system approaches significantly higher than both classic and AI-based systems. 2. Emo onal and Contextual Adaptability: because players would be er feel connected to NPCs through realis c emo onal responses and context-aware dialogue; 3. Replayability : unique dialogues will be procedural generated and therefore more replayable, which is associated with less monotony. The compara ve data strongly support the validity of the proposed conversa onal AI system, based on NPC interac ons can be significantly improved along with a degree of realism and, in general, player sa sfac on.",
+      "chunk_id": "5fcfcd36-0716-5931-847a-e1f7a5ddd35d"
+    },
+    {
+      "heading": "YES ( ) NO (✔)",
+      "body": "5.Provide links and dates for such ac ons if the informa on has been made public: Not Applicable 6.Provide the terms and condi ons of the MOU also if the work is done in collabora on within or outside university (Any Industry, other Universi es, or any other en ty). Not Applicable",
+      "chunk_id": "f8cf1f3e-5323-589e-90ad-19e1ee641522"
+    },
+    {
+      "heading": "POTENTIAL OPPORTUNITIES FOR COMMERCIALIZATION:",
+      "body": "This inven on has very high commercializa on poten al because of its applicability across various industries where the need for immersing digital experiences is climbing. Directly addressing one of the biggest challenges in the world's largest and fastest-growing gaming industry -diverse enough to help each end meet others -is the challenge of crea ng context-aware, lifelike, and engaging NPCs. Modern players require lifelike and interac ve interac ons; with this AI-powered conversa onal system, this has become a significant boon for game developers to create more innova ve gaming experiences.",
+      "chunk_id": "3c139d43-47ca-5224-b824-790f0b864fac"
+    },
+    {
+      "heading": "POTENTIAL OPPORTUNITIES FOR COMMERCIALIZATION:",
+      "body": "ac ons; with this AI-powered conversa onal system, this has become a significant boon for game developers to create more innova ve gaming experiences.\n\nIn addi on, open-world and role-playing games have gained massive popularity among players in which the interac on between players and NPCs is of utmost importance; this technology is sure to become something of standard. Apart from gaming, this inven on throws open vast windows of commercializa on for the training simula ons, VR, and AR also. This type of system can be par cularly helpful in health care, military, or customer service, as interac ve virtual characters and adap ve training can be more effec ve modules. Educa onal pla orms can apply it well in virtual tutors or interac ve environments to be er engage their learners. Addi onally, as the metaverse con nues to grow, there is going to be a related need for intelligent NPCs to give users in shared virtual spaces realis c and natural interac vity, and this inven on certainly represents one of the prime enablers for crea ng realis c virtual socie es. The system is easy to integrate into a variety of digital pla orms due to its scalable and modular architecture, thus reducing the barriers to entry. In conjunc on with the capacity for licensing the technology to game developers, VR/AR content creators, and enterprise training providers, this inven on holds poten al to generate major revenues. With global emphasis on the engaging technologies and further investments in AI, prospects are promising for this to be brought into wide commercial use. Provisional Patent Applica on.",
+      "chunk_id": "e57d75ea-3c9d-5db5-b674-37c8c48c5275"
+    },
+    {
+      "heading": "11.KEYWORDS:",
+      "body": "1. Conversa onal AI for NPCs  Refers to ar ficial intelligence systems designed to enable natural language conversa ons with non-playable characters (NPCs) in virtual environments.\n\n The process of crea ng NPC dialogues in real-me, based on player ac ons, in-game context, or other inputs, rather than relying on pre-wri en scripts.\n\n AI systems that adapt their behavior or responses based on environmental factors, recent events, or interac ons within a specific context.\n\n The crea on of algorithms or frameworks that simulate human-like emo ons to enhance the believability and realism of AI interac ons.\n\n A technique in game design where dialogues are generated algorithmically, offering varied and non-repe ve conversa during gameplay.\n\n NPC behaviors and dialogues shaped by unique personality traits, providing consistent and character-specific responses.\n\n NPCs controlled by ar ficial intelligence, capable of responding dynamically to player inputs and environmental changes.\n\n The use of NLP technologies to understand and generate human-like language within a gaming context.\n\n AI systems that allow NPCs to change their ac ons, dialogue, or emo onal states dynamically based on gameplay events.",
+      "chunk_id": "28138bcb-370e-5dfc-a79e-16961ffde580"
+    },
+    {
+      "heading": "Immersive gaming AI",
+      "body": " AI designed to enhance player immersion by making interac ons and experiences in the game world more realis c and engaging.\n\n11. Real-me NPC response genera on  The ability of NPCs to produce responses instantly based on the player's inputs and the game environment, without no ceable delays.\n\n12. Emo on and personality engines for NPCs  Subsystems that assign emo onal states and personality traits to NPCs, influencing their dialogue and reac ons.\n\n13. AI-powered interac ve storytelling  The use of AI to create or influence narra ves in games, enabling a more personalized and dynamic storytelling experience.\n\n Systems that adjust the storyline based on player choices, in-game events, or NPC interac ons.\n\n The ability of game AI to recognize and react to its surroundings, player ac ons, and ongoing events in a meaningful way.\n\n The applica on of machine learning techniques to improve the realism and variety of NPCgenerated dialogues.",
+      "chunk_id": "6d4e4aca-3f85-5b57-b5be-48bc64db9397"
+    },
+    {
+      "heading": "Intelligent character simula on in virtual environments",
+      "body": " AI systems that simulate human-like behavior and decision-making in NPCs within a virtual se ng.\n\n18. AI in role-playing games (RPGs)\n\n The integra on of AI technologies specifically in RPGs to enhance character interac ons and narra depth.\n\n AI systems enabling realis c and interac ve NPCs in metaverse environments, facilita ng social and func onal engagement.\n\n NPC designs specifically aimed at keeping players emo onally invested and engaged through realis c and meaningful interac ons.",
+      "chunk_id": "6e34f67f-9fa7-5dcc-8c6e-941281f1a740"
+    }
+  ],
+  "figures": [
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_fig_p1_0.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_fig_p1_1.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_vecfig_p1.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_fig_p2_0.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_vecfig_p2.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_fig_p5_0.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_fig_p5_1.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_vecfig_p9.png",
+      "embedding": null
+    },
+    {
+      "caption": "",
+      "image_path": "data\\figures\\14e9b8d1-86db-4edd-a265-c85887073324_vecfig_p10.png",
+      "embedding": null
+    }
+  ],
+  "tables": [
+    {
+      "caption": "",
+      "data": [
+        [
+          "INTERNAL INVENTOR(S)/STUDENT(S):",
+          ""
+        ],
+        [
+          "Full Name",
+          "Tania Bha(cid:425)acharyya"
+        ],
+        [
+          "Mobile Number",
+          "+91-6201725024"
+        ],
+        [
+          "Email",
+          "taniabhat2017@gmail.com"
+        ],
+        [
+          "UID/Registra(cid:415)on number",
+          "12311447"
+        ],
+        [
+          "Address of Internal Inventor",
+          "Lovely Professional University, Punjab-144411,"
+        ],
+        [
+          "",
+          "India"
+        ],
+        [
+          "Signature",
+          ""
+        ]
+      ],
+      "chunk_id": "18ce7e90-aa09-5de3-a06d-905fe2bf0a68"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "Full Name",
+          "Ishit Goswami"
+        ],
+        [
+          "Mobile Number",
+          "+91-8840358375"
+        ],
+        [
+          "Email",
+          "whoisishit@gmail.com"
+        ],
+        [
+          "UID/Registra(cid:415)on number",
+          "12324540"
+        ],
+        [
+          "Address of Internal Inventor",
+          "Lovely Professional University, Punjab-"
+        ],
+        [
+          "",
+          "144411, India"
+        ]
+      ],
+      "chunk_id": "f5f666b2-df42-505f-a30e-70203c7fc863"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "",
+          "Address of Internal Inventor",
+          "Lovely Professional University, Punjab-144411,"
+        ],
+        [
+          "",
+          "",
+          "India"
+        ],
+        [
+          "",
+          "Signature",
+          ""
+        ],
+        [
+          "D.",
+          "",
+          ""
+        ],
+        [
+          "",
+          "Full Name",
+          "Archana Chhabra"
+        ],
+        [
+          "",
+          "Mobile Number",
+          "+91-7888569075"
+        ],
+        [
+          "",
+          "Email",
+          ""
+        ],
+        [
+          "",
+          "UID/Registra(cid:415)on number",
+          "27647"
+        ],
+        [
+          "",
+          "Address of Internal Inventor",
+          "Lovely Professional University, Punjab-"
+        ],
+        [
+          "",
+          "",
+          "144411, India"
+        ],
+        [
+          "",
+          "Signature",
+          ""
+        ],
+        [
+          "",
+          "3.  DESCRIPTION OF THE INVENTION:",
+          ""
+        ],
+        [
+          "The present inven(cid:415)on pertains to an interac(cid:415)ve conversa(cid:415)onal ar(cid:415)ﬁcial intelligence system where the",
+          "",
+          ""
+        ],
+        [
+          "interac(cid:415)vity and realism of the non-playable characters (NPCs) in digital environments may be",
+          "",
+          ""
+        ],
+        [
+          "maximized. With this, a 'conversa(cid:415)onal AI' enabled with the system allows the NPCs to converse with",
+          "",
+          ""
+        ],
+        [
+          "other people, with answers and responses simula(cid:415)ng dynamic responses to environmental cues as well",
+          "",
+          ""
+        ],
+        [
+          "as other players, thus intensifying engagement and immersion for the users. This conversa(cid:415)onal AI",
+          "",
+          ""
+        ],
+        [
+          "system combines NLP, contextual awareness, emo(cid:415)onal modeling, and procedural genera(cid:415)on to create",
+          "",
+          ""
+        ],
+        [
+          "the feel of an NPC experience sensi(cid:415)ve and responsive to each individual.",
+          "",
+          ""
+        ],
+        [
+          "This is a crea(cid:415)on within the sphere of ar(cid:415)ﬁcial intelligence and digital games, with special orienta(cid:415)on",
+          "",
+          ""
+        ],
+        [
+          "towards the usage of capabili(cid:415)es of natural language driven by AI in order to intensify interac(cid:415)on with",
+          "",
+          ""
+        ],
+        [
+          "non-playable characters within virtual worlds.",
+          "",
+          ""
+        ]
+      ],
+      "chunk_id": "03c4fec2-7d14-509b-974c-d2fdc39cd4c1"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "A.  PROBLEM ADDRESSES BY THE INVENTION:"
+        ],
+        [
+          "T\nhe tradi(cid:415)onal sta(cid:415)c or pre-deﬁned vocabulary with which NPCs are programmed in digital games and"
+        ],
+        [
+          "simula(cid:415)ons has some severe drawbacks that typically prevent them from engaging in meaningful"
+        ],
+        [
+          "interac(cid:415)ons with the player. Even the current systems that a(cid:425)empt to use very elementary NLP or"
+        ],
+        [
+          "decision trees for this purpose are usually rather narrow or irrelevant because of their scope. This"
+        ],
+        [
+          "inven(cid:415)on removes the gaps by proposing a conversa(cid:415)onal AI system that creates dynamic and"
+        ],
+        [
+          "contextually relevant dialogues for NPCs, thereby making their interac(cid:415)ons more believable and"
+        ],
+        [
+          "versa(cid:415)le."
+        ],
+        [
+          "1. Sta(cid:415)c NPC Responses: Tradi(cid:415)onal NPCs rely on pre-deﬁned dialogue trees or scripted responses,"
+        ],
+        [
+          "which limit the depth and realism of player interac(cid:415)on."
+        ],
+        [
+          "2. Lack of Context-awareness: All the systems currently developed fail to account for the game"
+        ],
+        [
+          "environment that is beyond the scene, everything that the player does, as well as each in-game factor"
+        ],
+        [
+          "while crea(cid:415)ng responses from the non-player characters."
+        ],
+        [
+          "3. S(cid:415)ﬀ Personality and Emo(cid:415)on Models: In reality, these systems of the non-player characters are"
+        ],
+        [
+          "incapable of presen(cid:415)ng diﬀerent personali(cid:415)es and dynamic emo(cid:415)onal states, resul(cid:415)ng in interac(cid:415)ons"
+        ],
+        [
+          "that are repe(cid:415)(cid:415)ve and predictable."
+        ],
+        [
+          "4. Immersion Breakdowns: Sta(cid:415)c and unresponsive dialogues from a non-player character break the"
+        ],
+        [
+          "immersion caused for the players and lower the engagement and enjoyment."
+        ],
+        [
+          "5. Weak Procedural Genera(cid:415)on: The procedural contents that the current NLP gaming systems manage"
+        ],
+        [
+          "to generate are limited, as these end up represen(cid:415)ng contextually suitable and narra(cid:415)vely coherent"
+        ],
+        [
+          "dialogue in rare instances."
+        ]
+      ],
+      "chunk_id": "244c2bd4-c357-5435-8f1a-b05a6ce1a707"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "1. Lack of integra(cid:415)on of dynamic emo(cid:415)onal modeling, personality-driven dialogues, and real-(cid:415)me"
+        ],
+        [
+          "context awareness."
+        ],
+        [
+          "2. Weakness in the procedural genera(cid:415)on of dialogue in narra(cid:415)ve tone and player ac(cid:415)ons."
+        ],
+        [
+          "3. Not acquiring meaningful mul(cid:415)-turn dialogue while avoiding immersion issues as well as errors."
+        ],
+        [
+          "The innova(cid:415)on develops:"
+        ],
+        [
+          "- A layered architecture of conversa(cid:415)onal features, which encompass NLP, contextual awareness, -"
+        ],
+        [
+          "emo(cid:415)onal modeling, and procedural genera(cid:415)on."
+        ],
+        [
+          "- Dynamic NPC dialogue updated on the basis of environmental factors, player inputs, and personality"
+        ],
+        [
+          "traits."
+        ],
+        [
+          "- The ability to preserve narra(cid:415)ve coherence and at the same (cid:415)me oﬀer ﬂexible interac(cid:415)vity is crucial,"
+        ],
+        [
+          "giving a sense of life to these NPCs."
+        ],
+        [
+          "D. DETAILED DESCRIPTION:"
+        ],
+        [
+          "1. System Architecture"
+        ],
+        [
+          "The system consists of the following components:"
+        ],
+        [
+          "1.1 Dialogue Manager"
+        ],
+        [
+          "The Dialogue Manager is the central component in the ﬂow of control of conversa(cid:415)ons and coherent"
+        ],
+        [
+          "dialogue interac(cid:415)ons between:"
+        ],
+        [
+          "• Dialog State Tracker:  Tracks the state of a current dialogue, so that NPCs can remember and recall"
+        ],
+        [
+          "previous interac(cid:415)ons and refer to them appropriately."
+        ],
+        [
+          "•   Intent Recogni(cid:415)on Module: It connects the input in natural language by the player to recognize the"
+        ],
+        [
+          "intent hence, the meaning or purpose of an interac(cid:415)on being intended by the NPC."
+        ],
+        [
+          "1.2 Contextual Awareness Module"
+        ],
+        [
+          "This module makes the NPCs interac(cid:415)ve by being contextually relevant by understanding"
+        ],
+        [
+          "•  Environmental Context: Loca(cid:415)on, (cid:415)me and happening in game."
+        ],
+        [
+          "•  Player Ac(cid:415)ons: What the player has been doing recently and historically, that aﬀects how the NPC"
+        ],
+        [
+          "perceives."
+        ],
+        [
+          "•  Interac(cid:415)ons with Other NPCs: Inter-NPCs rela(cid:415)onships and ac(cid:415)vi(cid:415)es that may interfere with the"
+        ],
+        [
+          "dialogue."
+        ],
+        [
+          "1.3 Emo(cid:415)on and Personality Engine"
+        ],
+        [
+          "This engine provides every NPC with their own personality proﬁle and emo(cid:415)onal model, allowing the"
+        ],
+        [
+          "NPCs to:"
+        ],
+        [
+          "•Respond emo(cid:415)onally to player ac(cid:415)ons, in-game events, or dialogue."
+        ],
+        [
+          "•Exhibit consistent personality traits: friendly, hos(cid:415)le, sarcas(cid:415)c, and more."
+        ],
+        [
+          "•Display dynamic emo(cid:415)onal states; happy, angry, fearful-whilst poten(cid:415)ally aﬀec(cid:415)ng the tone for"
+        ],
+        [
+          "dialogue and the behavior."
+        ],
+        [
+          "1.4 Adap(cid:415)ve Response Generator"
+        ],
+        [
+          "This module is accountable for the genera(cid:415)on of real-(cid:415)me, contextually relevant dialogue:"
+        ],
+        [
+          "•Language Genera(cid:415)on Models: Leveraging the sophis(cid:415)cated NLP models to give responses that sound"
+        ],
+        [
+          "natural."
+        ],
+        [
+          "•Response Filtering: This means that the responses produced are in line with the tone of the game's"
+        ],
+        [
+          "narra(cid:415)ve and that of the personality traits of the NPC."
+        ]
+      ],
+      "chunk_id": "f0b233b6-8d1b-5e8b-93bb-12ee9b49152a"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "2. How it Works:"
+        ],
+        [
+          "2.1.Input by the Player: The player starts the interac(cid:415)on by producing a natural language input."
+        ],
+        [
+          "2.2.Intent Recogni(cid:415)on: The system a(cid:425)empts to recognize the input through the natural language of the"
+        ],
+        [
+          "player in the Intent Recogni(cid:415)on Module."
+        ],
+        [
+          "2.3.Context Analysis: The Contextual Awareness Module analyzes the context of the in-game"
+        ],
+        [
+          "environment, the ac(cid:415)ons of the player, and how the NPCs correlate."
+        ],
+        [
+          "2.4. Emo(cid:415)on and Personality Adjustment: The response of the NPC is determined by personality traits, as"
+        ],
+        [
+          "well as its emo(cid:415)on at this moment."
+        ],
+        [
+          "2.5. Genera(cid:415)on of Dialogue: Adap(cid:415)ve Response Generator design response to this context, emo(cid:415)on, and"
+        ],
+        [
+          "overall narra(cid:415)ve tone"
+        ],
+        [
+          "2.6. Output Delivery: The NPC delivers their response to the player in a natural and contextually"
+        ],
+        [
+          "appropriate fashion."
+        ]
+      ],
+      "chunk_id": "4e0206b3-55af-50f8-a62b-f6f97cc76c3d"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "E. RESULTS AND BENEFITS:"
+        ],
+        [
+          "Rules"
+        ],
+        [
+          "1.Answers should be contextual, relevant to the story of the game and environment."
+        ],
+        [
+          "2.NPC's responses must be an image of emo(cid:415)onal characteris(cid:415)cs, and personali(cid:415)es."
+        ],
+        [
+          "3.The environmental context and player history of every NPC should have an eﬀect on their dialogue."
+        ],
+        [
+          "4.Answers should be gramma(cid:415)cally correct and relevant to the input."
+        ],
+        [
+          "B\neneﬁts:"
+        ],
+        [
+          "1.The reac(cid:415)ons of the NPCs depend on the player's input in real-(cid:415)me and increase the sense of"
+        ],
+        [
+          "immersion."
+        ],
+        [
+          "2. The NPCs react emo(cid:415)onally, life-like, and hence, become alive."
+        ],
+        [
+          "3. All NPCs shall portray unique behaviors in lines with set personality a(cid:425)ributes ."
+        ],
+        [
+          "4. This system creates endless possibili(cid:415)es within the dialogue stream resul(cid:415)ng in a repe(cid:415)(cid:415)ve-free very"
+        ],
+        [
+          "replayable system."
+        ],
+        [
+          "5. Bearing in mind their knowledge of game context, the responses from the NPCs will appropriately"
+        ],
+        [
+          "reﬂect relevance and meaning."
+        ],
+        [
+          "Our Claims are:"
+        ],
+        [
+          "1. A conversa(cid:415)onal AI system for non-playable characters comprises of:"
+        ],
+        [
+          "o Discussion Manager that carries out the management of how a discourse ﬂow takes place by"
+        ],
+        [
+          "determining the player's intent."
+        ],
+        [
+          "o Contextual Awareness Module to include in-game context and what the player has done."
+        ],
+        [
+          "o Emo(cid:415)on and Personality Engine to generate dynamic responses that are personality-driven."
+        ],
+        [
+          "o Adap(cid:415)ve Response Generator with the use of natural language processing in order to generate"
+        ],
+        [
+          "dialogue in real-(cid:415)me."
+        ]
+      ],
+      "chunk_id": "652ef9e6-f566-5d66-92a4-adaa1036ce52"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "Player Reten(cid:415)on Rates: Assess if increased NPC interac(cid:415)ons enhance gameplay (cid:415)me."
+        ],
+        [
+          "a."
+        ],
+        [
+          "B. Realism and Convincingness"
+        ],
+        [
+          "Surveys of Player Reviews: Capture the subjec(cid:415)ve ranking on realism and emo(cid:415)onal depth associated"
+        ],
+        [
+          "with the NPCs and the overall level of player sa(cid:415)sfac(cid:415)on (for example, Likert scale 1-5)."
+        ],
+        [
+          "Dialogue Coherence: Count the number of contextually correct and error-free NPC responses."
+        ],
+        [
+          "C\n. Flexibility"
+        ],
+        [
+          "Reac(cid:415)on Speed: Evaluate the speed with which NPCs modify their reac(cid:415)on to new in-game situa(cid:415)ons."
+        ],
+        [
+          "Consistency with Context: Measure the propor(cid:415)on of NPC reac(cid:415)ons that match the latest player ac(cid:415)ons,"
+        ],
+        [
+          "game story, and environment."
+        ],
+        [
+          "D\n. Emo(cid:415)onal Dimension"
+        ],
+        [
+          "Emo(cid:415)onal Response Appropriateness: Evaluate the appropriateness of the emo(cid:415)onal expressions of the"
+        ],
+        [
+          "NPCs regarding the reac(cid:415)ons of players."
+        ],
+        [
+          "Emo(cid:415)onal States: Describe the distribu(cid:415)on of NPC emo(cid:415)onal responses (such as anger, happiness, fear)."
+        ],
+        [
+          "E\n. Procedural Dialogue Genera(cid:415)on"
+        ],
+        [
+          "Repeat Lines Sta(cid:415)s(cid:415)cs: Monitor the frequency of repeated lines in the dialogue during long gaming"
+        ],
+        [
+          "sessions."
+        ],
+        [
+          "Dialogue Uniqueness: Measure the non-repeatedness of the dialogue generated in the same type of in-"
+        ],
+        [
+          "game situa(cid:415)on."
+        ],
+        [
+          "3. Experimental Setup"
+        ],
+        [
+          "Par(cid:415)cipants"
+        ],
+        [
+          "A group of 100–200 par(cid:415)cipants with varied gaming experience."
+        ],
+        [
+          "Game Environment"
+        ],
+        [
+          "Develop a controlled environment (e.g., a small sandbox game or RPG simula(cid:415)on) where players interact"
+        ],
+        [
+          "with NPCs."
+        ],
+        [
+          "Study Design"
+        ],
+        [
+          "Divide par(cid:415)cipants into three groups, each exposed to one of the three NPC systems (baseline, exis(cid:415)ng"
+        ],
+        [
+          "AI, and proposed AI)."
+        ],
+        [
+          "Allow players to engage with NPCs naturally during gameplay."
+        ],
+        [
+          "Dura(cid:415)on"
+        ],
+        [
+          "2–4 hours of gameplay per par(cid:415)cipant, followed by feedback collec(cid:415)on."
+        ]
+      ],
+      "chunk_id": "7b3fbbe7-cc7b-563f-8a5e-e49edfff0c33"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "4.Hypothe(cid:415)cal Results",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Engagement",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Metric",
+          "Tradi(cid:415)onal NPCs",
+          "Exis(cid:415)ng AI",
+          "Proposed System"
+        ],
+        [
+          "Time Spent",
+          "15",
+          "25",
+          "40"
+        ],
+        [
+          "(minutes)",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Number of",
+          "10",
+          "20",
+          "35"
+        ],
+        [
+          "Interac(cid:415)ons",
+          "",
+          "",
+          ""
+        ],
+        [
+          "Reten(cid:415)on Rate",
+          "60%",
+          "70%",
+          "85%"
+        ],
+        [
+          "(%)",
+          "",
+          "",
+          ""
+        ]
+      ],
+      "chunk_id": "2d81efc5-83e0-5d61-b42e-a83370bfc531"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "6. Interpreta(cid:415)on from these data:"
+        ],
+        [
+          "a."
+        ],
+        [
+          "1. Engagement and Realism: the proposed system approaches signiﬁcantly higher than both classic and"
+        ],
+        [
+          "AI-based systems."
+        ],
+        [
+          "2. Emo(cid:415)onal and Contextual Adaptability: because players would be(cid:425)er feel connected to NPCs through"
+        ],
+        [
+          "realis(cid:415)c emo(cid:415)onal responses and context-aware dialogue;"
+        ],
+        [
+          "3. Replayability : unique dialogues will be procedural generated and therefore more replayable, which is"
+        ],
+        [
+          "associated with less monotony."
+        ],
+        [
+          "The compara(cid:415)ve data strongly support the validity of the proposed conversa(cid:415)onal AI system, based on"
+        ],
+        [
+          "which NPC interac(cid:415)ons can be signiﬁcantly improved along with a degree of realism and, in general,"
+        ],
+        [
+          "player sa(cid:415)sfac(cid:415)on."
+        ]
+      ],
+      "chunk_id": "50e74103-6f7f-5641-90d0-3558edd4403d"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "4.  Use and disclosure:",
+          "",
+          ""
+        ],
+        [
+          "A.  Have you described or shown your",
+          "YES ( )",
+          "NO (✔)"
+        ],
+        [
+          "inven(cid:415)on/design to anyone or in any",
+          "",
+          ""
+        ],
+        [
+          "conference?",
+          "",
+          ""
+        ],
+        [
+          "B.  Have you made any a(cid:425)empts to",
+          "YES ( )",
+          "NO (✔)"
+        ],
+        [
+          "commercialize your inven(cid:415)on (for",
+          "",
+          ""
+        ],
+        [
+          "example, have you approached any",
+          "",
+          ""
+        ],
+        [
+          "companies about purchasing or",
+          "",
+          ""
+        ],
+        [
+          "manufacturing your inven(cid:415)on)?",
+          "",
+          ""
+        ],
+        [
+          "C.  Has your inven(cid:415)on been described in any",
+          "YES ( )",
+          "NO (✔)"
+        ],
+        [
+          "printed publica(cid:415)on, or any other form of",
+          "",
+          ""
+        ],
+        [
+          "media, such as the Internet?",
+          "",
+          ""
+        ],
+        [
+          "D.  Do you have any collabora(cid:415)on with any",
+          "YES ( )",
+          "NO (✔)"
+        ],
+        [
+          "other ins(cid:415)tute or organiza(cid:415)on on the",
+          "",
+          ""
+        ],
+        [
+          "same? Provide name and other details.",
+          "",
+          ""
+        ],
+        [
+          "E.  Name of Regulatory body or any other",
+          "YES ( )",
+          "NO (✔)"
+        ],
+        [
+          "approvals if required.",
+          "",
+          ""
+        ]
+      ],
+      "chunk_id": "97c5d0c9-5600-5a15-b015-eb79bea3092f"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "7. POTENTIAL OPPORTUNITIES FOR COMMERCIALIZATION:"
+        ],
+        [
+          "T\nhis inven(cid:415)on has very high commercializa(cid:415)on poten(cid:415)al because of its applicability across various"
+        ],
+        [
+          "industries where the need for immersing digital experiences is climbing. Directly addressing one of the"
+        ],
+        [
+          "biggest challenges in the world's largest and fastest-growing gaming industry sector - diverse enough to"
+        ],
+        [
+          "help each end meet others - is the challenge of crea(cid:415)ng context-aware, lifelike, and engaging NPCs."
+        ],
+        [
+          "Modern players require lifelike and interac(cid:415)ve interac(cid:415)ons; with this AI-powered conversa(cid:415)onal system,"
+        ],
+        [
+          "this has become a signiﬁcant boon for game developers to create more innova(cid:415)ve gaming experiences."
+        ],
+        [
+          "In addi(cid:415)on, open-world and role-playing games have gained massive popularity among players in which"
+        ],
+        [
+          "the interac(cid:415)on between players and NPCs is of utmost importance; this technology is sure to become"
+        ],
+        [
+          "something of standard. Apart from gaming, this inven(cid:415)on throws open vast windows of"
+        ],
+        [
+          "commercializa(cid:415)on for the training simula(cid:415)ons, VR, and AR also."
+        ],
+        [
+          "T\nhis type of system can be par(cid:415)cularly helpful in health care, military, or customer service, as interac(cid:415)ve"
+        ],
+        [
+          "virtual characters and adap(cid:415)ve training can be more eﬀec(cid:415)ve modules. Educa(cid:415)onal pla(cid:414)orms can apply"
+        ],
+        [
+          "it well in virtual tutors or interac(cid:415)ve environments to be(cid:425)er engage their learners. Addi(cid:415)onally, as the"
+        ],
+        [
+          "metaverse con(cid:415)nues to grow, there is going to be a related need for intelligent NPCs to give users in"
+        ],
+        [
+          "shared virtual spaces realis(cid:415)c and natural interac(cid:415)vity, and this inven(cid:415)on certainly represents one of the"
+        ],
+        [
+          "prime enablers for crea(cid:415)ng realis(cid:415)c virtual socie(cid:415)es. The system is easy to integrate into a variety of"
+        ],
+        [
+          "digital pla(cid:414)orms due to its scalable and modular architecture, thus reducing the barriers to entry. In"
+        ],
+        [
+          "conjunc(cid:415)on with the capacity for licensing the technology to game developers, VR/AR content creators,"
+        ],
+        [
+          "and enterprise training providers, this inven(cid:415)on holds poten(cid:415)al to generate major revenues. With global"
+        ],
+        [
+          "emphasis on the engaging technologies and further investments in AI, prospects are promising for this to"
+        ],
+        [
+          "be brought into wide commercial use."
+        ],
+        [
+          "8.LIST OF COMPANIES WHICH CAN BE CONTACTED FOR COMMERCIALIZATION ALONG WITH THE"
+        ],
+        [
+          "WEBSITE LINK:"
+        ],
+        [
+          "Not Available"
+        ],
+        [
+          "9.ANY BASIC PATENT WHICH HAS BEEN USED AND WE NEED TO PAY ROYALTY TO THEM: Not Applicable"
+        ],
+        [
+          "10.FILING OPTIONS:"
+        ],
+        [
+          "Provisional Patent Applica(cid:415)on."
+        ]
+      ],
+      "chunk_id": "47673e31-103c-5277-86ce-79e56636705c"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "11.KEYWORDS:",
+          ""
+        ],
+        [
+          "1. Conversa(cid:415)onal AI for NPCs",
+          ""
+        ],
+        [
+          "",
+          "Refers to ar(cid:415)ﬁcial intelligence systems designed to enable natural language conversa(cid:415)ons with"
+        ],
+        [
+          "",
+          "non-playable characters (NPCs) in virtual environments."
+        ],
+        [
+          "2.  Dynamic NPC dialogue genera(cid:415)on",
+          ""
+        ],
+        [
+          "",
+          "The process of crea(cid:415)ng NPC dialogues in real-(cid:415)me, based on player ac(cid:415)ons, in-game context, or"
+        ],
+        [
+          "",
+          "other inputs, rather than relying on pre-wri(cid:425)en scripts."
+        ],
+        [
+          "3.  Context-aware ar(cid:415)ﬁcial intelligence",
+          ""
+        ],
+        [
+          "",
+          "AI systems that adapt their behavior or responses based on environmental factors, recent"
+        ],
+        [
+          "",
+          "events, or interac(cid:415)ons within a speciﬁc context."
+        ],
+        [
+          "4.  Emo(cid:415)on modeling in AI systems",
+          ""
+        ],
+        [
+          "",
+          "The crea(cid:415)on of algorithms or frameworks that simulate human-like emo(cid:415)ons to enhance the"
+        ],
+        [
+          "",
+          "believability and realism of AI interac(cid:415)ons."
+        ],
+        [
+          "5. Procedural dialogue genera(cid:415)on",
+          ""
+        ],
+        [
+          "",
+          "A technique in game design where dialogues are generated algorithmically, oﬀering varied and"
+        ],
+        [
+          "",
+          "non-repe(cid:415)(cid:415)ve conversa(cid:415)ons during gameplay."
+        ],
+        [
+          "6.  Personality-driven NPC interac(cid:415)ons",
+          ""
+        ],
+        [
+          "",
+          "NPC behaviors and dialogues shaped by unique personality traits, providing consistent and"
+        ],
+        [
+          "",
+          "character-speciﬁc responses."
+        ],
+        [
+          "7. AI-driven non-playable characters",
+          ""
+        ],
+        [
+          "",
+          "NPCs controlled by ar(cid:415)ﬁcial intelligence, capable of responding dynamically to player inputs and"
+        ],
+        [
+          "",
+          "environmental changes."
+        ],
+        [
+          "8. Natural language processing in gaming",
+          ""
+        ],
+        [
+          "",
+          "The use of NLP technologies to understand and generate human-like language within a gaming"
+        ],
+        [
+          "",
+          "context."
+        ],
+        [
+          "9. Adap(cid:415)ve NPC behavior systems",
+          ""
+        ],
+        [
+          "",
+          "AI systems that allow NPCs to change their ac(cid:415)ons, dialogue, or emo(cid:415)onal states dynamically"
+        ],
+        [
+          "",
+          "based on gameplay events."
+        ],
+        [
+          "10.  Immersive gaming AI",
+          ""
+        ],
+        [
+          "",
+          "AI designed to enhance player immersion by making interac(cid:415)ons and experiences in the game"
+        ],
+        [
+          "",
+          "world more realis(cid:415)c and engaging."
+        ]
+      ],
+      "chunk_id": "3fb7470d-034f-508e-b88d-908459aa4104"
+    },
+    {
+      "caption": "",
+      "data": [
+        [
+          "",
+          "The ability of NPCs to produce responses instantly based on the player's inputs and the game"
+        ],
+        [
+          "",
+          "environment, without no(cid:415)ceable delays."
+        ],
+        [
+          "12. Emo(cid:415)on and personality engines for NPCs",
+          ""
+        ],
+        [
+          "",
+          "Subsystems that assign emo(cid:415)onal states and personality traits to NPCs, inﬂuencing their"
+        ],
+        [
+          "",
+          "dialogue and reac(cid:415)ons."
+        ],
+        [
+          "13.  AI-powered interac(cid:415)ve storytelling",
+          ""
+        ],
+        [
+          "",
+          "The use of AI to create or inﬂuence narra(cid:415)ves in games, enabling a more personalized and"
+        ],
+        [
+          "",
+          "dynamic storytelling experience."
+        ],
+        [
+          "14.  Dynamic narra(cid:415)ve systems in games",
+          ""
+        ],
+        [
+          "",
+          "Systems that adjust the storyline based on player choices, in-game events, or NPC interac(cid:415)ons."
+        ],
+        [
+          "15.  Game AI contextual awareness",
+          ""
+        ],
+        [
+          "",
+          "The ability of game AI to recognize and react to its surroundings, player ac(cid:415)ons, and ongoing"
+        ],
+        [
+          "",
+          "events in a meaningful way."
+        ],
+        [
+          "16.  Machine learning for NPC dialogue",
+          ""
+        ],
+        [
+          "",
+          "The applica(cid:415)on of machine learning techniques to improve the realism and variety of NPC-"
+        ],
+        [
+          "",
+          "generated dialogues."
+        ],
+        [
+          "17.  Intelligent character simula(cid:415)on in virtual environments",
+          ""
+        ],
+        [
+          "",
+          "AI systems that simulate human-like behavior and decision-making in NPCs within a virtual"
+        ],
+        [
+          "",
+          "se(cid:427)ng."
+        ],
+        [
+          "18.  AI in role-playing games (RPGs)",
+          ""
+        ],
+        [
+          "",
+          "The integra(cid:415)on of AI technologies speciﬁcally in RPGs to enhance character interac(cid:415)ons and"
+        ],
+        [
+          "",
+          "narra(cid:415)ve depth."
+        ],
+        [
+          "19.  Metaverse NPC interac(cid:415)on AI",
+          ""
+        ],
+        [
+          "",
+          "AI systems enabling realis(cid:415)c and interac(cid:415)ve NPCs in metaverse environments, facilita(cid:415)ng social"
+        ],
+        [
+          "",
+          "and func(cid:415)onal engagement."
+        ],
+        [
+          "20.  Engagement-focused NPC systems",
+          ""
+        ],
+        [
+          "",
+          "NPC designs speciﬁcally aimed at keeping players emo(cid:415)onally invested and engaged through"
+        ],
+        [
+          "",
+          "realis(cid:415)c and meaningful interac(cid:415)ons."
+        ]
+      ],
+      "chunk_id": "be044165-e0d6-5d36-9473-0669a46584fa"
+    }
+  ],
+  "equations": [
+    "Mobile Number  +91-6201725024",
+    "Mobile Number  +91-8840358375",
+    "Mobile Number  +91-6299405795",
+    "Mobile Number  +91-7888569075"
+  ],
+  "citations": []
+}
