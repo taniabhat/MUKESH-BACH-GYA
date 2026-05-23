@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 
-const BASE = 'http://localhost:8000/api/v1'
-const WS_BASE = 'ws://localhost:8000/ws'
+const BASE = '/api/v1'
+const WS_BASE = `ws://${window.location.host}/ws`
 
 const RUNNING_STATUSES = ['discovering', 'analyzing', 'drafting', 'refining', 'humanizing', 'reviewing']
 

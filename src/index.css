@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* ── CSS Custom Properties — Light Theme ───────── */
 :root {
@@ -460,7 +458,7 @@ html, body, #root {
 #new-project-btn { color: var(--accent); border-color: var(--accent); }
 #new-project-btn:hover { background-color: rgba(216,0,115,0.05); border-color: var(--accent); }
 
-/* ── Right-panel idle feature chips ───────────── */
+/* ── Right-panel idle feature chips ───────────── */   
 #right-panel .font-mono.text-\[\#4a6fa5\].border.border-\[\#0c2040\] {
   background: rgba(216,0,115,0.05);
   border-color: var(--border);
