@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import AsyncGenerator
 
 from sqlalchemy import JSON
 from sqlalchemy import Boolean
@@ -20,7 +19,6 @@ from sqlalchemy.orm import relationship
 
 from core.database import engine
 from core.database import AsyncSessionLocal
-from core.database import get_db
 
 
 # -------------------------------------------------------------------

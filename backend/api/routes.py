@@ -183,7 +183,17 @@ async def trigger_analysis(
 ) -> TaskResponse:
     project = await get_project_or_404(db, project_id)
 
-    if project.status != "discovering":
+    discovery_ready = project.status == "discovering"
+
+    if project.status == "idle":
+        paper_result = await db.execute(
+            select(Paper.id)
+            .where(Paper.project_id == project_id)
+            .limit(1)
+        )
+        discovery_ready = paper_result.scalar_one_or_none() is not None
+
+    if not discovery_ready:
         raise HTTPException(
             status_code=400,
             detail="Discovery must complete first"
@@ -216,6 +226,7 @@ async def approve_report(
         select(ReviewReport)
         .where(ReviewReport.project_id == project_id)
         .order_by(desc(ReviewReport.created_at))
+        .limit(1)
     )
 
     result = await db.execute(query)
@@ -229,7 +240,7 @@ async def approve_report(
         )
 
     report.user_edits = body.user_edits
-    report.approved_at = body.approved_at
+    report.approved_at = body.approved_at.replace(tzinfo=None) if body.approved_at else None
 
     project.status = "approved"
 
@@ -467,6 +478,7 @@ async def get_report(
         select(ReviewReport)
         .where(ReviewReport.project_id == project_id)
         .order_by(desc(ReviewReport.version))
+        .limit(1)
     )
 
     result = await db.execute(query)
@@ -494,6 +506,7 @@ async def get_gaps(
         select(ReviewReport)
         .where(ReviewReport.project_id == project_id)
         .order_by(desc(ReviewReport.version))
+        .limit(1)
     )
 
     result = await db.execute(query)
@@ -521,6 +534,7 @@ async def get_draft(
         select(PaperDraft)
         .where(PaperDraft.project_id == project_id)
         .order_by(desc(PaperDraft.version))
+        .limit(1)
     )
 
     result = await db.execute(query)
@@ -565,6 +579,7 @@ async def get_review_report(
         select(ReviewReport)
         .where(ReviewReport.project_id == project_id)
         .order_by(desc(ReviewReport.version))
+        .limit(1)
     )
 
     result = await db.execute(query)
@@ -607,9 +622,9 @@ async def download_export(
 ) -> FileResponse:
     await get_project_or_404(db, project_id)
 
-    export_path = Path(
-        f"/data/exports/{project_id}.{fmt}"
-    )
+    from config import get_settings
+    settings = get_settings()
+    export_path = settings.exports_dir / str(project_id) / f"paper.{fmt}"
 
     if not export_path.exists():
         raise HTTPException(

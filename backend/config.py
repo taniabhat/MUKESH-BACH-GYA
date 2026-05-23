@@ -38,7 +38,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     REDIS_URL: str
 
-    QDRANT_URL: str
+    QDRANT_URL: str = ""
+    QDRANT_PATH: str = "./data/qdrant_local"
 
     NEO4J_URL: str
     NEO4J_USER: str
@@ -51,27 +52,14 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
-    QWEN3_MODEL: str = "nvidia/nemotron-3-super-120b-a12b:free"
-    DEEPSEEK_MODEL: str = "openai/gpt-oss-120b:free"
-    PHI3_MODEL: str = "z-ai/glm-4.5-air:free"
+    GPT_OSS_120B: str = "openai/gpt-oss-120b:free"
     HF_API_KEY: str
     # Embeddings
-
-    EMBEDDING_MODEL: str = (
-        "BAAI/bge-m3"
-    )
-
-    RERANKER_MODEL: str = (
-        "BAAI/bge-reranker-v2-m3"
-    )
-
-    IMAGE_EMBED_MODEL: str = (
-        "google/siglip-base-patch16-224"
-    )
-
-    CODE_EMBED_MODEL: str = (
-        "microsoft/codebert-base"
-    )
+    EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+    EMBEDDING_DIM: int = 384
+    RERANKER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    IMAGE_EMBED_MODEL: str = "google/siglip-base-patch16-224"
+    CODE_EMBED_MODEL: str = "BAAI/bge-small-en-v1.5"
 
     # Chunking
 
@@ -81,7 +69,6 @@ class Settings(BaseSettings):
     # Retrieval
 
     TOP_K_RETRIEVAL: int = 10
-    MAX_CONTEXT_TOKENS: int = 8000
 
     # ------------------------------------------------------------------
     # Services

@@ -42,9 +42,7 @@ CROSSREF_SEMAPHORE = (
     asyncio.Semaphore(5)
 )
 
-PDF_DOWNLOAD_SEMAPHORE = (
-    asyncio.Semaphore(3)
-)
+PDF_DOWNLOAD_SEMAPHORE = asyncio.Semaphore(5)
 
 
 # -------------------------------------------------------------------
@@ -931,12 +929,12 @@ async def download_pdf(
                 "ResearchOS/1.0"
         }
 
-        for attempt in range(5):
+        for attempt in range(3):
 
             try:
 
                 async with httpx.AsyncClient(
-                    timeout=120,
+                    timeout=30,
                     follow_redirects=True
                 ) as client:
 

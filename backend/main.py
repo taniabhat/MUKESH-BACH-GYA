@@ -7,16 +7,8 @@ from neo4j import AsyncGraphDatabase
 from qdrant_client import QdrantClient
 from sqlalchemy import text
 
-from api.routes import router as api_router
-from api.websocket import router as websocket_router
 from config import get_settings
-from core.database import engine
-from core.logging import get_logger
-from core.logging import setup_logging
-from core.llm import warmup_llm
-from core.rag import ensure_qdrant_collections
-from models.db import init_db
-
+from core.logging import get_logger, setup_logging
 
 settings = get_settings()
 
@@ -24,6 +16,15 @@ setup_logging(
     json_output=not settings.DEBUG,
     log_level="DEBUG" if settings.DEBUG else "INFO"
 )
+
+from api.routes import router as api_router
+from api.websocket import router as websocket_router
+from core.database import engine
+from models.db import init_db
+from core.llm import warmup_llm
+from core.rag import ensure_qdrant_collections
+
+logger = get_logger(__name__)
 
 logger = get_logger(__name__)
 
@@ -58,10 +59,16 @@ neo4j_driver = AsyncGraphDatabase.driver(
 # -------------------------------------------------------------------
 
 
-qdrant_client = QdrantClient(
-    url=settings.QDRANT_URL,
-    check_compatibility=False
-)
+if settings.QDRANT_URL:
+    qdrant_client = QdrantClient(
+        url=settings.QDRANT_URL,
+        check_compatibility=False
+    )
+else:
+    qdrant_client = QdrantClient(
+        path=settings.QDRANT_PATH,
+        check_compatibility=False
+    )
 
 
 # -------------------------------------------------------------------
@@ -173,6 +180,11 @@ async def on_shutdown() -> None:
 
     await neo4j_driver.close()
 
+    from core.graph import get_driver
+    driver = get_driver()
+    if driver:
+        await driver.close()
+
     await redis_client.aclose()
 
     logger.info("shutdown", status="complete")
@@ -209,11 +221,8 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://127.0.0.1:3000"
-        ],
-        allow_credentials=True,
+        allow_origins=["*"],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"]
     )

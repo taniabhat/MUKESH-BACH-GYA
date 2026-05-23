@@ -1,20 +1,15 @@
 import asyncio
 import json
+import uuid
 from datetime import datetime, timezone
 
 from celery import Celery
 from kombu import Queue
 from redis import Redis
+from sqlalchemy import select
 
-from agents import generation
-from agents import knowledge
-from agents import research
-from agents import review
-from agents import writing
 from config import get_settings
-from core.logging import get_logger
-from core.logging import setup_logging
-
+from core.logging import get_logger, setup_logging
 
 settings = get_settings()
 
@@ -23,7 +18,44 @@ setup_logging(
     log_level="INFO"
 )
 
+from agents import generation
+from agents import knowledge
+from agents import research
+from agents import review
+from agents import writing
+from core.database import make_worker_session
+from models.db import Project
 logger = get_logger("worker")
+
+
+def run_async(coro):
+    import models.db as _db_module
+
+    async def _run():
+        session_factory, worker_engine = make_worker_session()
+        _db_module.AsyncSessionLocal = session_factory
+        research.AsyncSessionLocal = session_factory
+        knowledge.AsyncSessionLocal = session_factory
+        writing.AsyncSessionLocal = session_factory
+        review.AsyncSessionLocal = session_factory
+        generation.AsyncSessionLocal = session_factory
+        
+        import core.graph as _graph_module
+        from neo4j import AsyncGraphDatabase
+        driver = AsyncGraphDatabase.driver(
+            settings.NEO4J_URL,
+            auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
+        )
+        _graph_module._driver = driver
+        
+        try:
+            return await coro
+        finally:
+            await worker_engine.dispose()
+            await driver.close()
+            _graph_module._driver = None
+
+    return asyncio.run(_run())
 
 
 def make_celery(app_name: str) -> Celery:
@@ -83,6 +115,50 @@ def notify_progress(
     )
 
 
+async def _update_project_status(
+    project_id: str,
+    status: str
+) -> None:
+    import models.db as db_module
+
+    async with db_module.AsyncSessionLocal() as db:
+        response = await db.execute(
+            select(Project).where(Project.id == uuid.UUID(project_id))
+        )
+        project = response.scalar_one_or_none()
+
+        if not project:
+            logger.warning(
+                "task.project_status.skipped",
+                project_id=project_id,
+                status=status
+            )
+            return
+
+        project.status = status
+        await db.commit()
+
+
+def update_project_status(
+    project_id: str,
+    status: str
+) -> None:
+    run_async(
+        _update_project_status(
+            project_id,
+            status
+        )
+    )
+
+
+def mark_project_error_after_retries(
+    task,
+    project_id: str
+) -> None:
+    if task.request.retries >= settings.MAX_RETRIES:
+        update_project_status(project_id, "error")
+
+
 @celery_app.task(
     bind=True,
     name="tasks.discovery"
@@ -90,32 +166,44 @@ def notify_progress(
 def run_discovery_task(
     self,
     project_id: str
-) -> dict:
-    try:
-        logger.info("task.discovery.started", project_id=project_id, task_id=self.request.id)
-        notify_progress(project_id, "discovery", "started")
+):
 
-        result = asyncio.run(
+    logger.info(
+        "task.discovery.started",
+        project_id=project_id
+    )
+
+    try:
+
+        result = run_async(
             research.run_discovery(project_id)
         )
 
-        logger.info("task.discovery.success", project_id=project_id, output=result)
-        notify_progress(project_id, "discovery", "done")
+        update_project_status(project_id, "idle")
 
-        return {
-            "status": "success",
-            "project_id": project_id,
-            "result": result
-        }
+        logger.info(
+            "task.discovery.completed",
+            project_id=project_id
+        )
 
-    except Exception as error:
-        logger.error("task.discovery.failed", project_id=project_id, error=str(error), exc_info=True)
-        notify_progress(project_id, "discovery", "failed")
+        return result
+
+    except Exception as exc:
+
+        try:
+            mark_project_error_after_retries(self, project_id)
+        except Exception as db_error:
+            logger.exception("task.discovery.failure_update.failed", error=str(db_error))
+
+        logger.exception(
+            "task.discovery.failed",
+            project_id=project_id,
+            error=str(exc)
+        )
 
         raise self.retry(
-            exc=error,
-            countdown=10,
-            max_retries=settings.MAX_RETRIES
+            exc=exc,
+            countdown=30
         )
 
 
@@ -131,22 +219,27 @@ def run_analysis_task(
         logger.info("task.analysis.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "analysis", "started")
 
-        result = asyncio.run(
+        result = run_async(
             research.run_document_analysis(project_id)
         )
 
         logger.info("task.analysis.success", project_id=project_id, output=result)
         notify_progress(project_id, "analysis", "done")
 
+        gap_task = run_gap_task.delay(project_id)
+
         return {
             "status": "success",
             "project_id": project_id,
-            "result": result
+            "result": result,
+            "next_stage": "gap_analysis",
+            "next_task_id": gap_task.id
         }
 
     except Exception as error:
         logger.error("task.analysis.failed", project_id=project_id, error=str(error), exc_info=True)
         notify_progress(project_id, "analysis", "failed")
+        mark_project_error_after_retries(self, project_id)
 
         raise self.retry(
             exc=error,
@@ -167,12 +260,13 @@ def run_gap_task(
         logger.info("task.gap_analysis.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "gap_analysis", "started")
 
-        result = asyncio.run(
+        result = run_async(
             knowledge.run_gap_analysis(project_id)
         )
 
         logger.info("task.gap_analysis.success", project_id=project_id, gap_count=len(result.get("identified_gaps", [])))
         notify_progress(project_id, "gap_analysis", "done")
+        update_project_status(project_id, "idle")
 
         return {
             "status": "success",
@@ -183,6 +277,7 @@ def run_gap_task(
     except Exception as error:
         logger.error("task.gap_analysis.failed", project_id=project_id, error=str(error), exc_info=True)
         notify_progress(project_id, "gap_analysis", "failed")
+        mark_project_error_after_retries(self, project_id)
 
         raise self.retry(
             exc=error,
@@ -204,7 +299,7 @@ def run_draft_task(
         logger.info("task.drafting.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "drafting", "started")
 
-        result = asyncio.run(
+        result = run_async(
             writing.generate_draft(
                 project_id=project_id,
                 plan=plan
@@ -213,6 +308,7 @@ def run_draft_task(
 
         logger.info("task.drafting.success", project_id=project_id, sections=list(result.keys()))
         notify_progress(project_id, "drafting", "done")
+        update_project_status(project_id, "idle")
 
         return {
             "status": "success",
@@ -223,6 +319,7 @@ def run_draft_task(
     except Exception as error:
         logger.error("task.drafting.failed", project_id=project_id, error=str(error), exc_info=True)
         notify_progress(project_id, "drafting", "failed")
+        mark_project_error_after_retries(self, project_id)
 
         raise self.retry(
             exc=error,
@@ -243,12 +340,13 @@ def run_refinement_task(
         logger.info("task.refinement.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "refinement", "started")
 
-        result = asyncio.run(
+        result = run_async(
             writing.run_refinement(project_id)
         )
 
         logger.info("task.refinement.success", project_id=project_id, sections=list(result.keys()))
         notify_progress(project_id, "refinement", "done")
+        update_project_status(project_id, "idle")
 
         return {
             "status": "success",
@@ -259,6 +357,7 @@ def run_refinement_task(
     except Exception as error:
         logger.error("task.refinement.failed", project_id=project_id, error=str(error), exc_info=True)
         notify_progress(project_id, "refinement", "failed")
+        mark_project_error_after_retries(self, project_id)
 
         raise self.retry(
             exc=error,
@@ -279,12 +378,13 @@ def run_humanization_task(
         logger.info("task.humanization.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "humanization", "started")
 
-        result = asyncio.run(
+        result = run_async(
             writing.run_humanization(project_id)
         )
 
         logger.info("task.humanization.success", project_id=project_id, sections=list(result.keys()))
         notify_progress(project_id, "humanization", "done")
+        update_project_status(project_id, "idle")
 
         return {
             "status": "success",
@@ -295,6 +395,7 @@ def run_humanization_task(
     except Exception as error:
         logger.error("task.humanization.failed", project_id=project_id, error=str(error), exc_info=True)
         notify_progress(project_id, "humanization", "failed")
+        mark_project_error_after_retries(self, project_id)
 
         raise self.retry(
             exc=error,
@@ -315,18 +416,19 @@ def run_review_task(
         logger.info("task.review.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "review", "started")
 
-        reviewer_result = asyncio.run(
+        reviewer_result = run_async(
             review.run_reviewer_simulation(project_id)
         )
 
         logger.info("task.review.reviewer_done", project_id=project_id, overall_score=reviewer_result.get("overall_score"))
 
-        citation_result = asyncio.run(
+        citation_result = run_async(
             review.run_citation_validation(project_id)
         )
 
         logger.info("task.review.citations_done", project_id=project_id, validated=len(citation_result.get("validated_citations", [])))
         notify_progress(project_id, "review", "done")
+        update_project_status(project_id, "idle")
 
         return {
             "status": "success",
@@ -338,6 +440,7 @@ def run_review_task(
     except Exception as error:
         logger.error("task.review.failed", project_id=project_id, error=str(error), exc_info=True)
         notify_progress(project_id, "review", "failed")
+        mark_project_error_after_retries(self, project_id)
 
         raise self.retry(
             exc=error,
@@ -359,7 +462,7 @@ def run_export_task(
         logger.info("task.export.started", project_id=project_id, format=fmt, task_id=self.request.id)
         notify_progress(project_id, "export", "started")
 
-        result = asyncio.run(
+        result = run_async(
             generation.run_ieee_export(
                 project_id=project_id,
                 fmt=fmt
@@ -368,6 +471,7 @@ def run_export_task(
 
         logger.info("task.export.success", project_id=project_id, format=fmt, output_path=result)
         notify_progress(project_id, "export", "done")
+        update_project_status(project_id, "complete")
 
         return {
             "status": "success",
@@ -379,6 +483,7 @@ def run_export_task(
     except Exception as error:
         logger.error("task.export.failed", project_id=project_id, format=fmt, error=str(error), exc_info=True)
         notify_progress(project_id, "export", "failed")
+        mark_project_error_after_retries(self, project_id)
 
         raise self.retry(
             exc=error,
@@ -399,7 +504,7 @@ def run_code_gen_task(
         logger.info("task.code_generation.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "code_generation", "started")
 
-        result = asyncio.run(
+        result = run_async(
             generation.run_code_generation(project_id)
         )
 
@@ -435,7 +540,7 @@ def run_diagram_task(
         logger.info("task.diagram_generation.started", project_id=project_id, task_id=self.request.id)
         notify_progress(project_id, "diagram_generation", "started")
 
-        result = asyncio.run(
+        result = run_async(
             generation.run_diagram_generation(project_id)
         )
 

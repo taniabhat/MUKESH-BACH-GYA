@@ -30,9 +30,7 @@ logger = get_logger("agents.generation")
 # -------------------------------------------------------------------
 
 
-BASE_GENERATED_DIR = Path(
-    "/data/generated"
-)
+BASE_GENERATED_DIR = settings.generated_dir
 
 EXPORT_DIR = settings.exports_dir
 
@@ -57,6 +55,7 @@ async def load_latest_draft(
             .order_by(
                 desc(PaperDraft.version)
             )
+            .limit(1)
         )
 
         result = await db.execute(query)
@@ -725,6 +724,117 @@ Table:
     return "\n\n".join(assembled)
 
 
+def assemble_ieee_latex(
+    draft_sections: dict,
+    figures: list,
+    tables: list
+) -> str:
+    abstract = draft_sections.get("Abstract", "Abstract goes here.")
+    
+    sections_tex = []
+    ordered_sections = [
+        "Introduction", "Related Work", "Methodology", 
+        "Experiments", "Results", "Discussion", "Conclusion"
+    ]
+    
+    for sec in ordered_sections:
+        if sec in draft_sections:
+            content = draft_sections[sec]
+            # Simple markdown to latex replacements for bold/italics could be done here, 
+            # but for simplicity we'll just insert the text. 
+            # In a real app we'd convert the markdown to LaTeX properly.
+            sections_tex.append(f"\\section{{{sec}}}\n{content}\n")
+            
+    sections_body = "\n".join(sections_tex)
+    
+    template = r"""\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Conference Paper Title*\\
+{\footnotesize \textsuperscript{*}Note: Sub-titles are not captured in Xplore and
+should not be used}
+\thanks{Identify applicable funding agency here. If none, delete this.}
+}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{5\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{6\textsuperscript{th} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+}
+
+\maketitle
+
+\begin{abstract}
+__ABSTRACT__
+\end{abstract}
+
+\begin{IEEEkeywords}
+component, formatting, style, styling, insert
+\end{IEEEkeywords}
+
+__SECTIONS__
+
+\section*{Acknowledgment}
+
+The preferred spelling of the word ``acknowledgment'' in America is without 
+an ``e'' after the ``g''. Avoid the stilted expression ``one of us (R. B. 
+G.) thanks $\ldots$''. Instead, try ``R. B. G. thanks$\ldots$''. Put sponsor 
+acknowledgments in the unnumbered footnote on the first page.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\vspace{12pt}
+\color{red}
+IEEE conference templates contain guidance text for composing and formatting conference papers. Please ensure that all template text is removed from your conference paper prior to submission to the conference. Failure to remove the template text from your paper may result in your paper not being published.
+
+\end{document}
+"""
+    
+    tex = template.replace("__ABSTRACT__", abstract).replace("__SECTIONS__", sections_body)
+    return tex
+
 def build_bibtex(
     citations: list[dict]
 ) -> str:
@@ -844,46 +954,28 @@ async def run_ieee_export(
 
     if fmt == "tex":
 
-        subprocess.run(
-            [
-                "pandoc",
-                str(markdown_path),
-                "-o",
-                str(output_path)
-            ],
-            check=True
-        )
+        latex_content = assemble_ieee_latex(draft.sections, figures, tables)
+        # Fix unicode characters that break pdflatex
+        latex_content = latex_content.replace("\u202F", " ")
+        output_path.write_text(latex_content)
 
     elif fmt == "pdf":
 
-        latex_path = (
-            export_dir
-            / "paper.tex"
-        )
-
-        subprocess.run(
-            [
-                "pandoc",
-                str(markdown_path),
-                "-o",
-                str(latex_path)
-            ],
-            check=True
-        )
+        latex_content = assemble_ieee_latex(draft.sections, figures, tables)
+        # Fix unicode characters that break pdflatex
+        latex_content = latex_content.replace("\u202F", " ")
+        latex_path = export_dir / "paper.tex"
+        latex_path.write_text(latex_content)
 
         subprocess.run(
             [
                 "pdflatex",
+                "-interaction=nonstopmode",
                 "-output-directory",
                 str(export_dir),
                 str(latex_path)
             ],
             check=True
-        )
-
-        output_path = (
-            export_dir
-            / "paper.pdf"
         )
 
     elif fmt == "docx":
@@ -903,13 +995,6 @@ async def run_ieee_export(
         raise ValueError(
             f"Unsupported format: {fmt}"
         )
-
-    await save_asset(
-        project_id=project_id,
-        asset_type="paper",
-        content=None,
-        file_path=str(output_path)
-    )
 
     logger.info("generation.export.success", project_id=project_id, format=fmt, output_path=str(output_path))
     return str(output_path)

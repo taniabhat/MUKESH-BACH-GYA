@@ -234,6 +234,7 @@ async def load_humanized_draft(
             .order_by(
                 desc(PaperDraft.version)
             )
+            .limit(1)
         )
 
         result = await db.execute(query)
@@ -263,6 +264,7 @@ async def load_gap_report(
             .order_by(
                 desc(ReviewReport.version)
             )
+            .limit(1)
         )
 
         result = await db.execute(query)

@@ -7,8 +7,38 @@ Every module should use: logger = get_logger(__name__)
 
 import logging
 import sys
+import json
+import redis
 
 import structlog
+
+from config import get_settings
+
+# Global sync redis client for logging
+_redis_client = None
+
+def get_redis_client():
+    global _redis_client
+    if _redis_client is None:
+        settings = get_settings()
+        _redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+    return _redis_client
+
+def redis_publish_processor(logger, log_method, event_dict):
+    project_id = event_dict.get("project_id")
+    if project_id:
+        try:
+            r = get_redis_client()
+            # Prepare payload for frontend
+            payload = {
+                "event": event_dict.get("event"),
+                "status": event_dict.get("level", "info"),
+                "details": {k: v for k, v in event_dict.items() if k not in ("event", "level", "project_id", "timestamp")}
+            }
+            r.publish(f"project:{project_id}:events", json.dumps(payload))
+        except Exception:
+            pass
+    return event_dict
 
 
 def setup_logging(
@@ -31,6 +61,7 @@ def setup_logging(
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.UnicodeDecoder(),
+        redis_publish_processor,
     ]
 
     if json_output:

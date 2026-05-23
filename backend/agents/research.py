@@ -19,6 +19,7 @@ from models.db import Paper
 from models.db import Project
 from services import paper_api
 from config import settings
+from prompts.templates import DISCOVERY_QUERY_EXPANSION
 
 
 logger = get_logger("agents.research")
@@ -42,7 +43,7 @@ async def expand_queries(
 
     response = await chat(
         messages=[
-            build_system_message("You are an expert researcher. Generate 5 highly specific academic search queries. YOU MUST ONLY RETURN THE QUERIES, ONE PER LINE. DO NOT OUTPUT ANY OTHER TEXT OR REASONING."),
+            build_system_message(DISCOVERY_QUERY_EXPANSION),
             build_user_message(prompt)
         ],
         model=get_model("research"),
@@ -74,11 +75,6 @@ async def fetch_all_sources(
         paper_api.search_semantic_scholar(
             query,
             limit=20
-        ),
-
-        paper_api.search_arxiv(
-            query,
-            limit=10
         ),
 
         paper_api.search_crossref(
@@ -230,13 +226,8 @@ def cosine_similarity(
     b: list[float]
 ) -> float:
 
-    numerator = sum(
-        x * y
-        for x, y in zip(a, b)
-    )
-
+    numerator = sum(x * y for x, y in zip(a, b))
     norm_a = sum(x * x for x in a) ** 0.5
-
     norm_b = sum(y * y for y in b) ** 0.5
 
     if norm_a == 0 or norm_b == 0:
@@ -245,49 +236,36 @@ def cosine_similarity(
     return numerator / (norm_a * norm_b)
 
 
-async def rank_by_relevance(
+def rank_by_relevance_tfidf(
     papers: list[dict],
     idea: str
 ) -> list[dict]:
-
+    """Fast local TF-IDF ranking — no network calls."""
     if not papers:
         return []
 
-    idea_embedding = (await rag.embed_text([
-        idea
-    ]))[0]
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity as sk_cosine
 
     abstracts = [
-        paper.get("abstract", "")
+        (paper.get("abstract") or paper.get("title") or "")
         for paper in papers
     ]
 
-    abstract_embeddings = await rag.embed_text(
-        abstracts
-    )
+    corpus = [idea] + abstracts
 
-    ranked = []
+    vectorizer = TfidfVectorizer(max_features=512, stop_words="english")
+    matrix = vectorizer.fit_transform(corpus)
 
-    for paper, embedding in zip(
-        papers,
-        abstract_embeddings
-    ):
+    idea_vec = matrix[0]
+    abstract_vecs = matrix[1:]
 
-        similarity = cosine_similarity(
-            idea_embedding,
-            embedding
-        )
+    scores = sk_cosine(idea_vec, abstract_vecs).flatten()
 
-        paper["relevance_score"] = similarity
+    for paper, score in zip(papers, scores):
+        paper["relevance_score"] = float(score)
 
-        ranked.append(paper)
-
-    ranked.sort(
-        key=lambda x: x["relevance_score"],
-        reverse=True
-    )
-
-    return ranked
+    return sorted(papers, key=lambda x: x["relevance_score"], reverse=True)
 
 
 # -------------------------------------------------------------------
@@ -500,33 +478,24 @@ async def run_discovery(
 
             all_papers.extend(results)
 
-        deduped = deduplicate(
-            all_papers
-        )
+        deduped = deduplicate(all_papers)
 
-        ranked = await rank_by_relevance(
-            deduped,
-            idea
-        )
+        ranked = rank_by_relevance_tfidf(deduped, idea)
 
-        expanded = await expand_citations(
-            ranked[:20]
-        )
+        expanded = await expand_citations(ranked[:5])
 
-        reranked = await rank_by_relevance(
-            expanded,
-            idea
-        )
+        reranked = rank_by_relevance_tfidf(expanded, idea)
 
-        top_papers = reranked[:50]
+        top_papers = reranked[:10]
 
-        for paper in top_papers:
+        pdf_tasks = [
+            download_pdf(paper)
+            for paper in top_papers
+        ]
+        pdf_paths = await asyncio.gather(*pdf_tasks, return_exceptions=True)
 
-            pdf_path = await download_pdf(
-                paper
-            )
-
-            paper["pdf_path"] = pdf_path
+        for paper, pdf_path in zip(top_papers, pdf_paths):
+            paper["pdf_path"] = pdf_path if not isinstance(pdf_path, Exception) else None
 
         paper_ids = await save_papers_to_db(
             top_papers,
@@ -567,9 +536,12 @@ async def run_discovery(
 
 
 async def analyze_paper(
+    project_id: str,
     paper_id: str,
     pdf_path: str
 ) -> None:
+
+    paper_id = str(paper_id)
 
     doc_result = (
         await document.process_paper(
@@ -580,7 +552,7 @@ async def analyze_paper(
 
     await rag.index_paper(
         doc_result,
-        paper_id
+        project_id
     )
 
     async with AsyncSessionLocal() as db:
@@ -667,14 +639,25 @@ async def run_document_analysis(
         logger.debug("research.analysis.processing", paper_id=paper.id)
         tasks.append(
             analyze_paper(
-                paper.id,
+                project_id,
+                str(paper.id),
                 paper.pdf_path
             )
         )
 
     if tasks:
         logger.info("research.analysis.started", task_count=len(tasks))
-        await asyncio.gather(*tasks)
+        # Process 2 at a time to avoid OOM from concurrent PaddleOCR/GROBID
+        sem = asyncio.Semaphore(1)
+
+        async def bounded(t):
+            async with sem:
+                return await t
+
+        results = await asyncio.gather(*[bounded(t) for t in tasks], return_exceptions=True)
+        for r in results:
+            if isinstance(r, Exception):
+                logger.error("research.analysis.task_failed", error=str(r), exc_info=r)
 
     logger.info("research.analysis.success", project_id=project_id, processed_papers=len(tasks))
     await log_agent_event(

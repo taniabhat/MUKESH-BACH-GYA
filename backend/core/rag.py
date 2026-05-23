@@ -1,15 +1,13 @@
 import asyncio
 import hashlib
 import math
+import random
 import uuid
 from collections import defaultdict
 from io import BytesIO
 
 import httpx
 import numpy as np
-import torch
-from huggingface_hub import InferenceClient
-from PIL import Image
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance
 from qdrant_client.models import FieldCondition
@@ -17,8 +15,6 @@ from qdrant_client.models import Filter
 from qdrant_client.models import MatchValue
 from qdrant_client.models import PointStruct
 from qdrant_client.models import VectorParams
-from transformers import AutoModel
-from transformers import AutoProcessor
 
 from config import get_settings
 from core.document import DocumentResult
@@ -27,6 +23,7 @@ from core.llm import build_user_message
 from core.llm import chat
 from core.llm import get_model
 from core.logging import get_logger
+from core.embeddings import embed_texts, embed_single, rerank as rerank_candidates, embed_images
 
 
 settings = get_settings()
@@ -35,57 +32,14 @@ logger = get_logger("core.rag")
 
 
 # -------------------------------------------------------------------
-# HF Inference Client
-# -------------------------------------------------------------------
-
-
-hf_client = InferenceClient(
-    provider="hf-inference",
-    api_key=settings.HF_API_KEY
-)
-
-
-# -------------------------------------------------------------------
-# Lazy Loaded Vision Models
-# -------------------------------------------------------------------
-
-
-_vision_model = None
-_vision_processor = None
-
-
-def get_vision_model():
-
-    global _vision_model
-    global _vision_processor
-
-    if (
-        _vision_model is None
-        or _vision_processor is None
-    ):
-
-        _vision_processor = AutoProcessor.from_pretrained(
-            settings.IMAGE_EMBED_MODEL
-        )
-
-        _vision_model = AutoModel.from_pretrained(
-            settings.IMAGE_EMBED_MODEL
-        )
-
-    return (
-        _vision_model,
-        _vision_processor
-    )
-
-
-# -------------------------------------------------------------------
 # Qdrant Client
 # -------------------------------------------------------------------
 
 
-qdrant = QdrantClient(
-    url=settings.QDRANT_URL
-)
+if settings.QDRANT_URL:
+    qdrant = QdrantClient(url=settings.QDRANT_URL)
+else:
+    qdrant = QdrantClient(path=settings.QDRANT_PATH)
 
 
 # -------------------------------------------------------------------
@@ -103,11 +57,11 @@ def ensure_qdrant_collections() -> None:
     }
 
     collection_configs = {
-        "text_chunks": 1024,
+        "text_chunks": settings.EMBEDDING_DIM,
         "figure_chunks": 768,
-        "table_chunks": 1024,
-        "code_chunks": 768,
-        "equation_chunks": 1024
+        "table_chunks": settings.EMBEDDING_DIM,
+        "code_chunks": settings.EMBEDDING_DIM,
+        "equation_chunks": settings.EMBEDDING_DIM
     }
 
     for collection_name, dimension in collection_configs.items():
@@ -122,112 +76,6 @@ def ensure_qdrant_collections() -> None:
                 distance=Distance.COSINE
             )
         )
-
-
-# -------------------------------------------------------------------
-# Embeddings
-# -------------------------------------------------------------------
-
-
-async def embed_text(
-    texts: list[str]
-) -> list[list[float]]:
-
-    embeddings = []
-
-    for text in texts:
-        clean_text = text if (text and str(text).strip()) else " "
-
-        vector = hf_client.feature_extraction(
-            clean_text,
-            model=settings.EMBEDDING_MODEL
-        )
-
-        if (
-            isinstance(vector, list)
-            and len(vector) > 0
-            and isinstance(vector[0], list)
-        ):
-            pooled = np.mean(
-                np.array(vector),
-                axis=0
-            ).tolist()
-
-            embeddings.append(pooled)
-
-        else:
-            embeddings.append(vector)
-
-    return embeddings
-
-
-async def embed_images(
-    image_paths: list[str]
-) -> list[list[float]]:
-
-    model, processor = get_vision_model()
-
-    embeddings = []
-
-    for path in image_paths:
-
-        image = Image.open(
-            path
-        ).convert("RGB")
-
-        inputs = processor(
-            images=image,
-            return_tensors="pt"
-        )
-
-        with torch.no_grad():
-
-            outputs = model(**inputs)
-
-            pooled = (
-                outputs.last_hidden_state
-                .mean(dim=1)
-                .squeeze()
-                .cpu()
-                .numpy()
-                .tolist()
-            )
-
-        embeddings.append(pooled)
-
-    return embeddings
-
-
-async def embed_code(
-    code_snippets: list[str]
-) -> list[list[float]]:
-
-    embeddings = []
-
-    for snippet in code_snippets:
-
-        vector = hf_client.feature_extraction(
-            snippet,
-            model=settings.CODE_EMBED_MODEL
-        )
-
-        if (
-            isinstance(vector, list)
-            and len(vector) > 0
-            and isinstance(vector[0], list)
-        ):
-
-            pooled = np.mean(
-                np.array(vector),
-                axis=0
-            ).tolist()
-
-            embeddings.append(pooled)
-
-        else:
-            embeddings.append(vector)
-
-    return embeddings
 
 
 # -------------------------------------------------------------------
@@ -285,7 +133,12 @@ async def index_paper(
 ) -> None:
 
     logger.info("rag.index_paper.started", paper_id=doc.paper_id, project_id=project_id)
-    chunks = chunk_document(doc)
+    
+    chunks = doc.chunks
+    for c in chunks:
+        if "metadata" not in c:
+            c["metadata"] = {}
+        c["metadata"]["project_id"] = project_id
 
     logger.debug("rag.index_paper.chunked", paper_id=doc.paper_id, chunks=len(chunks))
 
@@ -294,7 +147,7 @@ async def index_paper(
     table_chunks = []
     equation_chunks = []
 
-    for chunk in doc_result.chunks:
+    for chunk in chunks:
 
         chunk_type = chunk["chunk_type"]
 
@@ -312,7 +165,7 @@ async def index_paper(
 
     if text_chunks:
 
-        text_vectors = await embed_text([
+        text_vectors = await embed_texts([
             chunk["content"]
             for chunk in text_chunks
         ])
@@ -338,7 +191,7 @@ async def index_paper(
 
     if table_chunks:
 
-        table_vectors = await embed_text([
+        table_vectors = await embed_texts([
             chunk["content"]
             for chunk in table_chunks
         ])
@@ -351,7 +204,7 @@ async def index_paper(
 
     if equation_chunks:
 
-        equation_vectors = await embed_text([
+        equation_vectors = await embed_texts([
             chunk["content"]
             for chunk in equation_chunks
         ])
@@ -479,20 +332,18 @@ async def hybrid_search(
     filters: dict | None = None
 ) -> list[dict]:
 
-    query_vector = (
-        await embed_text([query])
-    )[0]
+    query_vector = await embed_single(query)
 
     qdrant_filter = build_filter(
         filters
     )
 
-    dense_results = qdrant.search(
+    dense_results = qdrant.query_points(
         collection_name=collection,
-        query_vector=query_vector,
+        query=query_vector,
         limit=top_k,
         query_filter=qdrant_filter
-    )
+    ).points
 
     formatted_results = []
 
@@ -540,13 +391,10 @@ async def rerank(
         for item in candidates
     ]
 
-    scores = hf_client.sentence_similarity(
-        {
-            "source_sentence": query,
-            "sentences": candidate_texts
-        },
-        model=settings.RERANKER_MODEL
-    )
+    model = get_reranker(settings.RERANKER_MODEL)
+    pairs = [[query, text] for text in candidate_texts]
+    
+    scores = await asyncio.to_thread(model.predict, pairs)
 
     rescored = []
 
@@ -637,7 +485,7 @@ def compress_context(
                 existing["content"]
             )
 
-            if overlap > 0.8:
+            if overlap > 0.6:
 
                 is_duplicate = True
                 break
@@ -657,12 +505,17 @@ def compress_context(
 # -------------------------------------------------------------------
 
 
+DEFAULT_SEARCH_COLLECTIONS = ["text_chunks", "table_chunks", "equation_chunks"]
+
 async def retrieve(
     query: str,
     project_id: str | None = None,
     top_k: int = 10,
-    collections: list[str] = ["text_chunks"]
+    collections: list[str] | None = None
 ) -> list[dict]:
+
+    if collections is None:
+        collections = DEFAULT_SEARCH_COLLECTIONS
 
     logger.debug("rag.retrieve.started", query=query, collections=collections, top_k=top_k)
     rewritten_queries = await rewrite_query(
@@ -674,12 +527,6 @@ async def retrieve(
     filters = {
         "project_id": project_id
     }
-
-    collections = [
-        "text_chunks",
-        "table_chunks",
-        "equation_chunks"
-    ]
 
     for rewritten_query in rewritten_queries:
 
@@ -698,7 +545,7 @@ async def retrieve(
         all_results
     )
 
-    reranked = await rerank(
+    reranked = await rerank_candidates(
         query=query,
         candidates=fused_results,
         top_n=top_k

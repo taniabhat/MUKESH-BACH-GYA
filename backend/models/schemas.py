@@ -90,7 +90,7 @@ class PaperResponse(BaseSchema):
 
     title: str
 
-    authors: list[dict] | None = []
+    authors: list[str | dict] | None = []
 
     year: int | None = None
 
@@ -186,8 +186,6 @@ class CitationResponse(BaseSchema):
     validated: bool
 
     validation_status: str
-
-    doi: str | None = None
 
     created_at: datetime | None = None
 

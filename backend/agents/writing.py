@@ -17,13 +17,17 @@ from agents.review import validate_doi
 from prompts.templates import (
     ABSTRACT_PROMPT,
     CONCLUSION_PROMPT,
+    CRITIC_ACCURACY,
+    CRITIC_COHERENCE,
+    CRITIC_METHODOLOGY,
+    CRITIC_NOVELTY,
     DISCUSSION_PROMPT,
     EXPERIMENTS_PROMPT,
     HUMANIZER,
     INTRODUCTION_PROMPT,
     METHODOLOGY_PROMPT,
     RELATED_WORK_PROMPT,
-    RESULTS_PROMPT
+    RESULTS_PROMPT,
 )
 
 
@@ -205,53 +209,24 @@ async def run_critic(
 async def critique_logical_coherence(
     sections: dict
 ) -> dict:
-
-    return await run_critic(
-        sections,
-        """
-Analyze:
-- narrative consistency
-- section flow
-- unsupported claims
-- coherence
-"""
-    )
+    return await run_critic(sections, CRITIC_COHERENCE)
 
 
 async def critique_scientific_accuracy(
     sections: dict
 ) -> dict:
-
     evidence = await rag.retrieve(
         query="scientific factual verification",
         project_id="global",
         top_k=10
     )
-
-    return await run_critic(
-        sections,
-        f"""
-Verify scientific accuracy.
-
-Evidence:
-{evidence}
-"""
-    )
+    return await run_critic(sections, CRITIC_ACCURACY + f"\n\nEvidence:\n{evidence}")
 
 
 async def critique_novelty(
     sections: dict
 ) -> dict:
-
-    return await run_critic(
-        sections,
-        """
-Evaluate:
-- novelty clarity
-- differentiation
-- contribution uniqueness
-"""
-    )
+    return await run_critic(sections, CRITIC_NOVELTY)
 
 
 async def critique_citations(
@@ -287,17 +262,7 @@ async def critique_citations(
 async def critique_methodology(
     sections: dict
 ) -> dict:
-
-    return await run_critic(
-        sections,
-        """
-Check:
-- baselines
-- ablations
-- loss functions
-- reproducibility
-"""
-    )
+    return await run_critic(sections, CRITIC_METHODOLOGY)
 
 
 # -------------------------------------------------------------------
@@ -446,6 +411,7 @@ async def load_latest_draft(
             .order_by(
                 desc(PaperDraft.version)
             )
+            .limit(1)
         )
 
         result = await db.execute(query)
@@ -477,6 +443,7 @@ async def save_refined_draft(
             .order_by(
                 desc(PaperDraft.version)
             )
+            .limit(1)
         )
 
         latest_result = await db.execute(

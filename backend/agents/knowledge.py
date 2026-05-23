@@ -19,6 +19,7 @@ from models.db import AsyncSessionLocal
 from models.db import Paper
 from models.db import ReviewReport
 from pydantic import BaseModel
+from prompts.templates import LIMITATION_EXTRACTION, GAP_SYNTHESIS, NOVELTY_CHECK
 
 
 logger = get_logger("agents.knowledge")
@@ -29,8 +30,15 @@ logger = get_logger("agents.knowledge")
 # -------------------------------------------------------------------
 
 
+class LimitationItem(BaseModel):
+    category: str
+    description: str
+    severity: str
+    evidence: str
+
+
 class LimitationExtraction(BaseModel):
-    limitations: list[str]
+    limitations: list[LimitationItem]
 
 
 class GapSynthesis(BaseModel):
@@ -82,12 +90,7 @@ async def extract_limitations(
 
     extraction = await structured_chat(
         messages=[
-            build_system_message(
-                """
-Extract explicit research limitations.
-Return concise statements only.
-"""
-            ),
+            build_system_message(LIMITATION_EXTRACTION),
             build_user_message(content)
         ],
         model=get_model("research"),
@@ -96,7 +99,8 @@ Return concise statements only.
 
     tagged_limitations = []
 
-    for limitation in extraction.limitations:
+    for lim_item in extraction.limitations:
+        limitation_text = f"[{lim_item.category}] {lim_item.description} (Evidence: {lim_item.evidence})"
 
         category_response = await chat(
             messages=[
@@ -111,7 +115,7 @@ Classify this limitation into ONE category:
 Return category only.
 """
                 ),
-                build_user_message(limitation)
+                build_user_message(limitation_text)
             ],
             model=get_model("fast"),
             temperature=0.1,
@@ -120,7 +124,7 @@ Return category only.
 
         tagged_limitations.append({
             "paper_id": paper["id"],
-            "text": limitation,
+            "text": limitation_text,
             "category": (
                 category_response
                 .strip()
@@ -159,12 +163,14 @@ def cluster_limitations(
     if not limitations:
         return []
 
-    texts = [
-        item["text"]
-        for item in limitations
-    ]
+    # embeddings computed by caller via embed_text before clustering
+    # use text directly for KMeans via TF-IDF-style hashing
+    from sklearn.feature_extraction.text import TfidfVectorizer
 
-    embeddings = rag.embed_text(texts)
+    texts = [item["text"] for item in limitations]
+
+    vectorizer = TfidfVectorizer(max_features=128)
+    embeddings = vectorizer.fit_transform(texts).toarray()
 
     cluster_count = determine_cluster_count(
         len(limitations)
@@ -469,12 +475,8 @@ For each gap include:
 
     result = await structured_chat(
         messages=[
-            build_system_message(
-                "You are a research gap analyst."
-            ),
-            build_user_message(
-                synthesis_prompt
-            )
+            build_system_message(GAP_SYNTHESIS),
+            build_user_message(synthesis_prompt)
         ],
         model=get_model("research"),
         output_schema=GapSynthesis
@@ -525,11 +527,7 @@ Assess whether this idea is genuinely novel.
 
     result = await structured_chat(
         messages=[
-            build_system_message(
-                """
-Assess novelty on a scale of 0-10.
-"""
-            ),
+            build_system_message(NOVELTY_CHECK),
             build_user_message(prompt)
         ],
         model=get_model("research"),
@@ -682,29 +680,35 @@ async def run_gap_analysis(
 
             papers = result.scalars().all()
 
-        all_limitations = []
+        import asyncio
 
-        for paper in papers:
-            logger.debug("knowledge.extract_limitations", paper_id=paper.id)
+        async def process_single_paper(p):
+            logger.debug("knowledge.extract_limitations.start", paper_id=p.id)
+            try:
+                chunks = await rag.retrieve(
+                    query="limitations future work weaknesses",
+                    project_id=project_id,
+                    top_k=20
+                )
 
-            chunks = await rag.retrieve(
-                query="limitations future work weaknesses",
-                project_id=project_id,
-                top_k=20
-            )
-
-            extracted = (
-                await extract_limitations(
+                extracted = await extract_limitations(
                     {
-                        "id": paper.id
+                        "id": p.id
                     },
                     chunks
                 )
-            )
+                logger.debug("knowledge.extract_limitations.success", paper_id=p.id, count=len(extracted))
+                return extracted
+            except Exception as e:
+                logger.error("knowledge.extract_limitations.failed", paper_id=p.id, error=str(e), exc_info=True)
+                return []
 
-            all_limitations.extend(
-                extracted
-            )
+        tasks = [process_single_paper(paper) for paper in papers]
+        results = await asyncio.gather(*tasks)
+
+        all_limitations = []
+        for r in results:
+            all_limitations.extend(r)
 
         clusters = cluster_limitations(
             all_limitations

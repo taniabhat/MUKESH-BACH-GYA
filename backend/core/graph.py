@@ -1,10 +1,11 @@
+import re
 from collections import defaultdict
 
 from neo4j import AsyncGraphDatabase
 
 from config import get_settings
 from core.document import DocumentResult
-from core.rag import embed_text
+from core.embeddings import embed_single
 from core.logging import get_logger
 
 
@@ -79,8 +80,6 @@ async def build_paper_node(
 # -------------------------------------------------------------------
 
 
-import re
-
 def extract_entities(
     parsed_doc: DocumentResult
 ) -> dict:
@@ -150,7 +149,7 @@ async def build_relationships(
 
     async with driver.session() as session:
 
-        async with session.begin_transaction() as tx:
+        async with await session.begin_transaction() as tx:
 
             # --------------------------------------------------------
             # Authors
@@ -186,7 +185,7 @@ async def build_relationships(
 
             for method in entities["methods"]:
 
-                embedding = embed_text([method])[0]
+                embedding = await embed_single(method)
 
                 await tx.run(
                     """
@@ -439,24 +438,13 @@ async def find_contradictions() -> list[dict]:
 # -------------------------------------------------------------------
 
 
-def cosine_similarity(
-    a: list[float],
-    b: list[float]
-) -> float:
+import numpy as np
 
-    numerator = sum(
-        x * y
-        for x, y in zip(a, b)
-    )
-
-    norm_a = sum(x * x for x in a) ** 0.5
-
-    norm_b = sum(y * y for y in b) ** 0.5
-
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-
-    return numerator / (norm_a * norm_b)
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    va = np.array(a, dtype=np.float32)
+    vb = np.array(b, dtype=np.float32)
+    denom = float(np.linalg.norm(va) * np.linalg.norm(vb))
+    return 0.0 if denom == 0 else float(np.dot(va, vb) / denom)
 
 
 async def check_novelty(
@@ -464,9 +452,7 @@ async def check_novelty(
 ) -> dict:
 
     logger.debug("graph.check_novelty.started")
-    embedding = (await embed_text([
-        proposed_method
-    ]))[0]
+    embedding = await embed_single(proposed_method)
 
     query = """
     MATCH (m:Method)
@@ -577,7 +563,7 @@ async def analyze_trends(
     method_name: str | None = None
 ) -> dict:
 
-    logger.debug("graph.analyze_trends.started", method_name=method_name)
+    logger.debug("graph.analyze_trends.started", target_method=method_name)
     if method_name:
 
         query = """

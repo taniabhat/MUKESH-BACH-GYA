@@ -676,11 +676,12 @@ async def load_checkpoint(
             select(AgentRun)
             .where(
                 AgentRun.project_id == project_id,
-                AgentRun.agent_name == "supervisor"
+                AgentRun.agent_name == "supervisor.checkpoint"
             )
             .order_by(
                 desc(AgentRun.completed_at)
             )
+            .limit(1)
         )
 
         result = await db.execute(query)

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import time
 import threading
 from typing import Any
@@ -116,18 +117,14 @@ class StructuredOutputError(Exception):
 
 def get_model(task: str) -> str:
     model_map = {
-        "research": settings.QWEN3_MODEL,
-        "writing": settings.QWEN3_MODEL,
-        "reasoning": settings.QWEN3_MODEL,
-        "humanize": settings.QWEN3_MODEL,
-        "code": settings.DEEPSEEK_MODEL,
-        "fast": settings.PHI3_MODEL
+        "research":  settings.GPT_OSS_120B,
+        "writing":   settings.GPT_OSS_120B,
+        "humanize":  settings.GPT_OSS_120B,
+        "reasoning": settings.GPT_OSS_120B,
+        "code":      settings.GPT_OSS_120B,
+        "fast":      settings.GPT_OSS_120B,
     }
-
-    return model_map.get(
-        task,
-        settings.QWEN3_MODEL
-    )
+    return model_map.get(task, settings.GPT_OSS_120B)
 
 
 # -------------------------------------------------------------------
@@ -223,7 +220,7 @@ async def chat(
         "model": model,
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens
+        "max_tokens": max_tokens,
     }
 
     last_error = None
@@ -247,7 +244,18 @@ async def chat(
                 data["choices"][0]
                 ["message"]
                 ["content"]
-            )
+            ) or (
+                data["choices"][0]
+                ["message"]
+                .get("reasoning", "")
+            ) or ""
+
+            # Strip <think>...</think> blocks emitted by reasoning models
+            content = re.sub(
+                r"<think>[\s\S]*?</think>",
+                "",
+                content
+            ).strip()
 
             usage = data.get("usage", {})
             logger.info(
@@ -454,7 +462,13 @@ Do not wrap the JSON in code blocks.
                 temperature=0.2
             )
 
-            parsed = json.loads(response)
+            # Strip markdown code blocks
+            cleaned = re.sub(r"^```(?:json)?\s*", "", response, flags=re.MULTILINE)
+            cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.MULTILINE)
+            # Remove trailing commas which break json.loads
+            cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
+
+            parsed = json.loads(cleaned)
 
             result = output_schema.model_validate(parsed)
 

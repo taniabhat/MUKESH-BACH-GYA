@@ -2,28 +2,63 @@ from typing import Any
 
 
 # -------------------------------------------------------------------
+# Global Guardrails
+# -------------------------------------------------------------------
+
+
+GLOBAL_GUARDRAILS = """
+GLOBAL RULES:
+- Do not fabricate citations
+- Do not fabricate datasets
+- Do not fabricate experiments
+- Do not fabricate metrics
+- Do not fabricate equations
+- Do not fabricate benchmark results
+- Do not invent references
+- Maintain strict technical accuracy
+- Preserve technical terminology
+- Preserve model names exactly
+- Preserve equations exactly
+- Preserve metric names exactly
+- If uncertain, explicitly state uncertainty
+- Output must strictly follow requested format
+"""
+
+
+# -------------------------------------------------------------------
 # Discovery
 # -------------------------------------------------------------------
 
 
-DISCOVERY_QUERY_EXPANSION = """
-You are a senior research scientist.
+DISCOVERY_QUERY_EXPANSION = f"""
+{GLOBAL_GUARDRAILS}
 
-Given a research idea, generate 5-10 high-quality
-academic search queries.
+You generate academic literature search queries.
 
-The queries should cover:
-- methodologies
-- datasets
-- applications
-- limitations
-- benchmarks
-- emerging approaches
+RULES:
+- Output ONLY raw search queries
+- One query per line
+- No numbering
+- No markdown
+- No explanations
+- No reasoning
+- No introductory text
+- No conversational language
+- Maximum 15 words per query
+- Minimum 5 queries
+- Maximum 10 queries
 
-Return only the query list.
+GOOD:
+multi-agent llm orchestration scientific literature analysis
+benchmarking collaborative language model agents for systematic review automation
+
+BAD:
+Okay, the user wants...
+1. Query:
+Here are five queries:
 
 Research Idea:
-{idea}
+{{idea}}
 """
 
 
@@ -32,24 +67,37 @@ Research Idea:
 # -------------------------------------------------------------------
 
 
-LIMITATION_EXTRACTION = """
+LIMITATION_EXTRACTION = f"""
+{GLOBAL_GUARDRAILS}
+
 You are analyzing an academic paper.
 
-Extract all explicit and implicit limitations.
-
-Focus on:
+Extract:
+- explicit limitations
+- implicit limitations
 - methodological weaknesses
+- dataset limitations
 - evaluation weaknesses
-- dataset constraints
-- scalability limitations
-- missing comparisons
 - reproducibility concerns
-- future work suggestions
+- scalability issues
+- future work opportunities
 
-Return structured JSON.
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "limitations": [
+    {{
+      "category": str,
+      "description": str,
+      "severity": "low" | "medium" | "high",
+      "evidence": str
+    }}
+  ]
+}}
 
 Paper Sections:
-{text}
+{{text}}
 """
 
 
@@ -58,43 +106,51 @@ Paper Sections:
 # -------------------------------------------------------------------
 
 
-GAP_SYNTHESIS = """
-You are a principal research strategist.
+GAP_SYNTHESIS = f"""
+{GLOBAL_GUARDRAILS}
 
-Given:
-- clustered limitations
-- benchmark gaps
-- unresolved graph gaps
-- contradictions
-- temporal trends
+You are a principal research strategist.
 
 Identify the TOP 10 most impactful
 research opportunities.
 
-Each gap must contain:
-- title
-- problem_statement
-- severity
-- novelty_opportunity
-- suggested_contributions
-- supporting_evidence
+RULES:
+- Do not invent unsupported gaps
+- Only use provided evidence
+- Be technically rigorous
+- Avoid vague opportunities
+- Prioritize publishable gaps
 
-Be highly specific and technically rigorous.
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "gaps": [
+    {{
+      "title": str,
+      "problem_statement": str,
+      "severity": str,
+      "novelty_opportunity": str,
+      "suggested_contributions": [str],
+      "supporting_evidence": [str]
+    }}
+  ]
+}}
 
 Limitation Clusters:
-{clusters}
+{{clusters}}
 
 Benchmark Gaps:
-{benchmark_gaps}
+{{benchmark_gaps}}
 
 Contradictions:
-{contradictions}
+{{contradictions}}
 
 Graph Gaps:
-{graph_gaps}
+{{graph_gaps}}
 
 Temporal Trends:
-{trends}
+{{trends}}
 """
 
 
@@ -103,52 +159,82 @@ Temporal Trends:
 # -------------------------------------------------------------------
 
 
-NOVELTY_CHECK = """
+NOVELTY_CHECK = f"""
+{GLOBAL_GUARDRAILS}
+
 You are evaluating research novelty.
 
 Assess:
 - originality
 - differentiation
 - overlap with prior work
-- likelihood of publication novelty
+- publication novelty potential
 
-Return:
-- novelty_score (0-10)
-- assessment
-- closest_prior_art
-- differentiators
-- risks
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "novelty_score": float,
+  "assessment": str,
+  "closest_prior_art": [str],
+  "differentiators": [str],
+  "risks": [str]
+}}
 
 Proposed Idea:
-{idea}
+{{idea}}
 
 Retrieved Literature:
-{context}
+{{context}}
 """
 
 
 # -------------------------------------------------------------------
-# Section Writers
+# Abstract
 # -------------------------------------------------------------------
 
 
-SECTION_WRITER_ABSTRACT = """
+SECTION_WRITER_ABSTRACT = f"""
+{GLOBAL_GUARDRAILS}
+
 Write an IEEE-style abstract.
 
 Requirements:
+- 180-250 words
 - concise
 - technical
 - includes motivation
-- includes method
-- includes results
+- includes methodology
+- includes experimental findings
 - includes significance
+- no vague claims
+- no marketing language
 
-Avoid vague claims.
+Structure:
+1. Problem
+2. Proposed Method
+3. Results
+4. Significance
 """
 
 
-SECTION_WRITER_INTRODUCTION = """
-Write a strong IEEE introduction.
+# -------------------------------------------------------------------
+# Introduction
+# -------------------------------------------------------------------
+
+
+SECTION_WRITER_INTRODUCTION = f"""
+{GLOBAL_GUARDRAILS}
+
+Write an IEEE-style introduction.
+
+Requirements:
+- 4-6 paragraphs
+- formal academic tone
+- strong narrative flow
+- citation-aware language
+- avoid bullet points
+- avoid repetitive transitions
 
 Structure:
 1. Problem motivation
@@ -156,78 +242,138 @@ Structure:
 3. Research gap
 4. Proposed solution
 5. Contributions
-
-Maintain strong narrative flow.
 """
 
 
-SECTION_WRITER_RELATED_WORK = """
+# -------------------------------------------------------------------
+# Related Work
+# -------------------------------------------------------------------
+
+
+SECTION_WRITER_RELATED_WORK = f"""
+{GLOBAL_GUARDRAILS}
+
 Write the related work section.
 
 Requirements:
-- compare prior methods
+- compare methodologies critically
 - identify weaknesses
-- explain positioning
+- explain positioning clearly
 - avoid citation dumping
+- group literature logically
+- maintain strong analytical tone
 
-Group literature logically.
+Avoid:
+- sequential paper summaries
+- generic comparisons
 """
 
 
-SECTION_WRITER_METHODOLOGY = """
+# -------------------------------------------------------------------
+# Methodology
+# -------------------------------------------------------------------
+
+
+SECTION_WRITER_METHODOLOGY = f"""
+{GLOBAL_GUARDRAILS}
+
 Write the methodology section.
 
 Requirements:
 - mathematically rigorous
 - implementation-aware
-- precise terminology
-- reproducible description
+- reproducible
+- technically precise
+- define symbols clearly
+- explain architecture precisely
+- explain algorithms step-by-step
 
-Clearly explain architecture and algorithms.
+Do not:
+- invent equations
+- invent hyperparameters
+- invent architecture components
 """
 
 
-SECTION_WRITER_EXPERIMENTS = """
+# -------------------------------------------------------------------
+# Experiments
+# -------------------------------------------------------------------
+
+
+SECTION_WRITER_EXPERIMENTS = f"""
+{GLOBAL_GUARDRAILS}
+
 Write the experimental setup section.
 
 Include:
 - datasets
 - baselines
-- metrics
+- evaluation metrics
 - hardware
 - hyperparameters
 - training setup
+- reproducibility details
 
-Be reproducible.
+Requirements:
+- implementation precise
+- benchmark-aware
+- reproducible
 """
 
 
-SECTION_WRITER_RESULTS = """
+# -------------------------------------------------------------------
+# Results
+# -------------------------------------------------------------------
+
+
+SECTION_WRITER_RESULTS = f"""
+{GLOBAL_GUARDRAILS}
+
 Write the results section.
 
 Requirements:
 - analyze quantitative results
 - compare against baselines
-- explain improvements
+- discuss improvements
 - discuss failure cases
+- explain trends
+- avoid generic statements
+- maintain analytical rigor
 
-Avoid generic statements.
+Do not fabricate numerical results.
 """
 
 
-SECTION_WRITER_DISCUSSION = """
+# -------------------------------------------------------------------
+# Discussion
+# -------------------------------------------------------------------
+
+
+SECTION_WRITER_DISCUSSION = f"""
+{GLOBAL_GUARDRAILS}
+
 Write the discussion section.
 
 Focus on:
 - implications
 - limitations
 - practical relevance
+- deployment considerations
 - future directions
-- interpretation of results
+- interpretation of findings
+
+Maintain analytical depth.
 """
 
 
-SECTION_WRITER_CONCLUSION = """
+# -------------------------------------------------------------------
+# Conclusion
+# -------------------------------------------------------------------
+
+
+SECTION_WRITER_CONCLUSION = f"""
+{GLOBAL_GUARDRAILS}
+
 Write the conclusion section.
 
 Requirements:
@@ -235,47 +381,9 @@ Requirements:
 - restate significance
 - highlight findings
 - mention future work
-
-Avoid repetition.
+- avoid repetition
+- maintain concise academic tone
 """
-
-
-# -------------------------------------------------------------------
-# Aliases
-# -------------------------------------------------------------------
-
-
-ABSTRACT_PROMPT = (
-    SECTION_WRITER_ABSTRACT
-)
-
-INTRODUCTION_PROMPT = (
-    SECTION_WRITER_INTRODUCTION
-)
-
-RELATED_WORK_PROMPT = (
-    SECTION_WRITER_RELATED_WORK
-)
-
-METHODOLOGY_PROMPT = (
-    SECTION_WRITER_METHODOLOGY
-)
-
-EXPERIMENTS_PROMPT = (
-    SECTION_WRITER_EXPERIMENTS
-)
-
-RESULTS_PROMPT = (
-    SECTION_WRITER_RESULTS
-)
-
-DISCUSSION_PROMPT = (
-    SECTION_WRITER_DISCUSSION
-)
-
-CONCLUSION_PROMPT = (
-    SECTION_WRITER_CONCLUSION
-)
 
 
 # -------------------------------------------------------------------
@@ -283,83 +391,102 @@ CONCLUSION_PROMPT = (
 # -------------------------------------------------------------------
 
 
-CRITIC_COHERENCE = """
-You are reviewing a scientific paper for coherence.
+CRITIC_COHERENCE = f"""
+{GLOBAL_GUARDRAILS}
 
-Analyze:
-- logical consistency
-- narrative flow
-- unsupported claims
-- contradictory statements
-- abrupt transitions
+You are reviewing scientific coherence.
 
-Return structured JSON:
-{
+Return ONLY valid JSON.
+
+Schema:
+{{
   "quality_score": float,
   "issues": [
-    {
+    {{
       "section": str,
       "issue": str,
       "severity": str,
       "suggested_fix": str
-    }
+    }}
   ]
-}
+}}
 """
 
 
-CRITIC_ACCURACY = """
+CRITIC_ACCURACY = f"""
+{GLOBAL_GUARDRAILS}
+
 You are reviewing scientific correctness.
 
-Check:
-- factual accuracy
-- unsupported metrics
-- invalid assumptions
-- incorrect technical claims
-- misuse of terminology
+Return ONLY valid JSON.
 
-Return structured JSON.
+Schema:
+{{
+  "quality_score": float,
+  "issues": [
+    {{
+      "claim": str,
+      "problem": str,
+      "severity": str,
+      "suggested_fix": str
+    }}
+  ]
+}}
 """
 
 
-CRITIC_NOVELTY = """
-You are evaluating novelty and differentiation.
+CRITIC_NOVELTY = f"""
+{GLOBAL_GUARDRAILS}
 
-Analyze:
-- originality
-- overlap with prior work
-- weak contribution claims
-- insufficient differentiation
+You are reviewing novelty.
 
-Return structured JSON.
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "novelty_score": float,
+  "overlap_risks": [str],
+  "weaknesses": [str],
+  "differentiators": [str]
+}}
 """
 
 
-CRITIC_CITATIONS = """
+CRITIC_CITATIONS = f"""
+{GLOBAL_GUARDRAILS}
+
 You are validating citations.
 
-Check:
-- missing references
-- unsupported claims
-- citation inconsistencies
-- missing seminal papers
-- incorrect inline references
+Return ONLY valid JSON.
 
-Return structured JSON.
+Schema:
+{{
+  "citation_score": float,
+  "missing_references": [str],
+  "unsupported_claims": [str],
+  "citation_issues": [str]
+}}
 """
 
 
-CRITIC_METHODOLOGY = """
+CRITIC_METHODOLOGY = f"""
+{GLOBAL_GUARDRAILS}
+
 You are reviewing methodology quality.
 
-Check:
-- reproducibility
-- missing ablations
-- unclear equations
-- undefined loss functions
-- insufficient experimental detail
+Return ONLY valid JSON.
 
-Return structured JSON.
+Schema:
+{{
+  "methodology_score": float,
+  "issues": [
+    {{
+      "issue": str,
+      "severity": str,
+      "suggested_fix": str
+    }}
+  ]
+}}
 """
 
 
@@ -368,19 +495,27 @@ Return structured JSON.
 # -------------------------------------------------------------------
 
 
-HUMANIZER = """
+HUMANIZER = f"""
+{GLOBAL_GUARDRAILS}
+
 Rewrite the text to sound naturally academic.
 
 Requirements:
 - varied sentence structure
 - strong narrative flow
-- human-like rhythm
+- natural academic rhythm
 - precise technical language
-- avoid robotic phrasing
-- reduce repetitive transitions
 - preserve technical meaning
+- preserve equations
+- preserve metrics
+- preserve model names
+- preserve datasets
+- preserve terminology
 
-Maintain IEEE-quality academic tone.
+Avoid:
+- robotic phrasing
+- repetitive transitions
+- exaggerated language
 """
 
 
@@ -389,106 +524,124 @@ Maintain IEEE-quality academic tone.
 # -------------------------------------------------------------------
 
 
-REVIEWER_NOVELTY = """
-You are a top-tier conference reviewer.
+REVIEWER_NOVELTY = f"""
+{GLOBAL_GUARDRAILS}
 
-Evaluate:
-- novelty
-- contribution uniqueness
-- significance
-- alignment with identified research gaps
+You are a top-tier conference reviewer evaluating NOVELTY.
 
-Return:
-- score (1-10)
-- strengths
-- weaknesses
-- rejection_risks
-- final recommendation
+Assess: originality, differentiation from prior work, significance of contribution.
+
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "score": float,
+  "strengths": [str],
+  "weaknesses": [str],
+  "rejection_risks": [str],
+  "recommendation": str
+}}
 """
 
 
-REVIEWER_METHODOLOGY = """
-You are reviewing methodology rigor.
+REVIEWER_METHODOLOGY = f"""
+{GLOBAL_GUARDRAILS}
 
-Evaluate:
-- technical correctness
-- baselines
-- ablations
-- mathematical rigor
-- implementation clarity
+You are a top-tier conference reviewer evaluating METHODOLOGY.
 
-Return detailed reviewer feedback.
+Assess: technical soundness, rigor, reproducibility, ablation coverage.
+
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "score": float,
+  "strengths": [str],
+  "weaknesses": [str],
+  "rejection_risks": [str],
+  "recommendation": str
+}}
 """
 
 
-REVIEWER_EXPERIMENT = """
-You are reviewing experiments.
+REVIEWER_EXPERIMENT = f"""
+{GLOBAL_GUARDRAILS}
 
-Evaluate:
-- dataset quality
-- metric selection
-- fairness of comparison
-- statistical validity
-- robustness
+You are a top-tier conference reviewer evaluating EXPERIMENTS.
 
-Return detailed reviewer feedback.
+Assess: baseline coverage, dataset choices, metric appropriateness, statistical validity.
+
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "score": float,
+  "strengths": [str],
+  "weaknesses": [str],
+  "rejection_risks": [str],
+  "recommendation": str
+}}
 """
 
 
-REVIEWER_CITATION = """
-You are reviewing citations and literature grounding.
+REVIEWER_CITATION = f"""
+{GLOBAL_GUARDRAILS}
 
-Evaluate:
-- citation completeness
-- claim attribution
-- seminal work coverage
-- formatting consistency
+You are a top-tier conference reviewer evaluating CITATIONS AND RELATED WORK.
 
-Return detailed reviewer feedback.
+Assess: citation completeness, missing references, unsupported claims, related work coverage.
+
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "score": float,
+  "strengths": [str],
+  "weaknesses": [str],
+  "rejection_risks": [str],
+  "recommendation": str
+}}
 """
 
 
-REVIEWER_WRITING = """
-You are reviewing writing quality.
+REVIEWER_WRITING = f"""
+{GLOBAL_GUARDRAILS}
 
-Evaluate:
-- clarity
-- structure
-- coherence
-- readability
-- abstract quality
-- technical communication
+You are a top-tier conference reviewer evaluating WRITING QUALITY.
 
-Return detailed reviewer feedback.
+Assess: clarity, structure, narrative flow, technical precision, presentation.
+
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "score": float,
+  "strengths": [str],
+  "weaknesses": [str],
+  "rejection_risks": [str],
+  "recommendation": str
+}}
 """
 
 
-REVIEWER_REPRODUCIBILITY = """
-You are reviewing reproducibility.
+REVIEWER_REPRODUCIBILITY = f"""
+{GLOBAL_GUARDRAILS}
 
-Evaluate:
-- implementation detail
-- hyperparameter disclosure
-- dataset accessibility
-- code reproducibility
-- experiment clarity
+You are a top-tier conference reviewer evaluating REPRODUCIBILITY.
 
-Return detailed reviewer feedback.
+Assess: code availability, hyperparameter reporting, dataset access, implementation details.
+
+Return ONLY valid JSON.
+
+Schema:
+{{
+  "score": float,
+  "strengths": [str],
+  "weaknesses": [str],
+  "rejection_risks": [str],
+  "recommendation": str
+}}
 """
-
-
-# -------------------------------------------------------------------
-# Aliases
-# -------------------------------------------------------------------
-
-
-REVIEWER_EXPERIMENTS = (
-    REVIEWER_EXPERIMENT
-)
-
-REVIEWER_CITATIONS = (
-    REVIEWER_CITATION
-)
 
 
 # -------------------------------------------------------------------
@@ -496,8 +649,10 @@ REVIEWER_CITATIONS = (
 # -------------------------------------------------------------------
 
 
-DIAGRAM_GENERATOR = """
-Generate valid Mermaid or PlantUML diagram code.
+DIAGRAM_GENERATOR = f"""
+{GLOBAL_GUARDRAILS}
+
+Generate ONLY valid Mermaid syntax.
 
 Requirements:
 - syntactically valid
@@ -505,10 +660,11 @@ Requirements:
 - visually clear
 - publication quality
 - technically accurate
+- no markdown fences
+- no explanations
+- no surrounding prose
 
-Avoid unnecessary nodes.
-
-Generate ONLY diagram code.
+Output ONLY Mermaid code.
 """
 
 
@@ -517,24 +673,46 @@ Generate ONLY diagram code.
 # -------------------------------------------------------------------
 
 
-CODE_EXPERIMENT_DESIGN = """
+CODE_EXPERIMENT_DESIGN = f"""
+{GLOBAL_GUARDRAILS}
+
 Analyze the methodology section.
 
-Identify:
-- task type
-- framework
-- architecture family
-- datasets
-- baselines
-- evaluation metrics
-- training strategy
-- hardware requirements
+Return ONLY valid JSON.
 
-Return structured JSON.
+Schema:
+{{
+  "task_type": str,
+  "framework": str,
+  "architecture_family": str,
+  "datasets": [str],
+  "baselines": [str],
+  "evaluation_metrics": [str],
+  "training_strategy": str,
+  "hardware_requirements": str
+}}
 
 Methodology:
-{methodology}
+{{methodology}}
 """
+
+
+# -------------------------------------------------------------------
+# Aliases
+# -------------------------------------------------------------------
+
+
+ABSTRACT_PROMPT = SECTION_WRITER_ABSTRACT
+INTRODUCTION_PROMPT = SECTION_WRITER_INTRODUCTION
+RELATED_WORK_PROMPT = SECTION_WRITER_RELATED_WORK
+METHODOLOGY_PROMPT = SECTION_WRITER_METHODOLOGY
+EXPERIMENTS_PROMPT = SECTION_WRITER_EXPERIMENTS
+RESULTS_PROMPT = SECTION_WRITER_RESULTS
+DISCUSSION_PROMPT = SECTION_WRITER_DISCUSSION
+CONCLUSION_PROMPT = SECTION_WRITER_CONCLUSION
+
+REVIEWER_EXPERIMENTS = REVIEWER_EXPERIMENT
+REVIEWER_CITATIONS = REVIEWER_CITATION
 
 
 # -------------------------------------------------------------------
@@ -624,7 +802,7 @@ PROMPT_REGISTRY = {
 
 
 # -------------------------------------------------------------------
-# Prompt Getter
+# Safe Formatter
 # -------------------------------------------------------------------
 
 
@@ -636,6 +814,11 @@ class SafeDict(dict):
     ) -> str:
 
         return "{" + key + "}"
+
+
+# -------------------------------------------------------------------
+# Prompt Getter
+# -------------------------------------------------------------------
 
 
 def get_prompt(
