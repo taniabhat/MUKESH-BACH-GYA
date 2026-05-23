@@ -1,8 +1,10 @@
 import { useCallback, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 
-const BASE = '/api/v1'
-const WS_BASE = `ws://${window.location.host}/ws`
+const trimTrailingSlash = value => value.replace(/\/$/, '')
+
+const BASE = trimTrailingSlash(import.meta.env.VITE_BACKEND_API_URL || '/api/v1')
+const WS_BASE = trimTrailingSlash(import.meta.env.VITE_BACKEND_WS_URL || `ws://${window.location.host}/ws`)
 
 const RUNNING_STATUSES = ['discovering', 'analyzing', 'drafting', 'refining', 'humanizing', 'reviewing']
 
