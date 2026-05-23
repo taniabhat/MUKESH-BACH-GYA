@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ResearchOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg:       #07090f;
+  --surface:  #0c1018;
+  --panel:    #101520;
+  --border:   #1a2235;
+  --border2:  #243050;
+  --accent:   #c87d2e;
+  --accent-l: #e8993a;
+  --accent-d: #9a5f20;
+  --blue:     #3a7bd5;
+  --blue-l:   #4a8ee8;
+  --green:    #28a86a;
+  --red:      #c0392b;
+  --yellow:   #d4ab2e;
+  --text:     #b8c8e0;
+  --text-h:   #e8f0ff;
+  --text-m:   #6a7a96;
+  --text-s:   #3a4a62;
+  --radius:   6px;
+  --r-lg:     10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%; width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+/* ── Layout ─────────────────────────────────────────── */
+#app { display: flex; height: 100vh; width: 100vw; }
+
+#sidebar {
+  width: 280px; min-width: 280px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+#main {
+  flex: 1;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+.sidebar-head {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.logo-icon {
+  width: 34px; height: 34px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Playfair Display', serif;
+  font-weight: 700; font-size: 17px;
+  color: #fff; flex-shrink: 0;
+}
+.logo-text { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 600; color: var(--text-h); }
+.logo-sub  { font-size: 11px; color: var(--text-m); font-family: 'IBM Plex Mono', monospace; }
+
+.ws-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-s); margin-left: auto; flex-shrink: 0;
+  transition: background .4s;
+}
+.ws-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.ws-dot.error     { background: var(--red); }
+
+.new-btn {
+  margin: 14px 16px 10px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius);
+  padding: 9px 16px; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background .2s;
+  display: flex; align-items: center; gap: 6px;
+}
+.new-btn:hover { background: var(--accent-l); }
+
+.sidebar-label {
+  padding: 4px 20px 6px;
+  font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-s); font-family: 'IBM Plex Mono', monospace;
+}
+
+#project-list { flex: 1; overflow-y: auto; padding: 0 8px 16px; }
+
+.proj-item {
+  padding: 10px 14px; border-radius: var(--radius);
+  cursor: pointer; margin-bottom: 2px;
+  border: 1px solid transparent;
+  transition: background .15s, border-color .15s;
+  display: flex; align-items: center; gap: 10px;
+}
+.proj-item:hover { background: var(--panel); }
+.proj-item.active { background: var(--panel); border-color: var(--border2); }
+
+.proj-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.proj-title { font-size: 13px; color: var(--text-h); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-status-text { font-size: 10px; color: var(--text-m); font-family: 'IBM Plex Mono', monospace; }
+
+/* ── Topbar ─────────────────────────────────────────── */
+#topbar {
+  height: 52px; min-height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 24px;
+  gap: 12px;
+}
+#topbar h2 { font-family: 'Playfair Display', serif; font-size: 17px; color: var(--text-h); }
+.status-pill {
+  font-size: 11px; font-family: 'IBM Plex Mono', monospace;
+  padding: 3px 9px; border-radius: 20px; border: 1px solid;
+}
+.pill-idle      { color: var(--text-m); border-color: var(--border2); }
+.pill-running   { color: var(--blue-l); border-color: var(--blue); animation: pulse-border 1.4s infinite; }
+.pill-complete  { color: var(--green); border-color: var(--green); }
+.pill-error     { color: var(--red); border-color: var(--red); }
+.pill-approved  { color: var(--yellow); border-color: var(--yellow); }
+@keyframes pulse-border { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+.topbar-spacer { flex: 1; }
+#del-btn {
+  background: none; border: 1px solid var(--border2); color: var(--text-m);
+  border-radius: var(--radius); padding: 5px 12px; cursor: pointer; font-size: 12px;
+  transition: all .2s;
+}
+#del-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* ── Main content ────────────────────────────────────── */
+#content { flex: 1; overflow-y: auto; padding: 24px; }
+
+/* ── Welcome ─────────────────────────────────────────── */
+#welcome {
+  height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 16px; color: var(--text-m);
+}
+#welcome .big-logo {
+  font-family: 'Playfair Display', serif; font-size: 56px; color: var(--text-s);
+  line-height: 1;
+}
+#welcome p { max-width: 340px; font-size: 14px; }
+
+/* ── Pipeline Stepper ────────────────────────────────── */
+.pipeline-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 20px 24px; margin-bottom: 24px;
+  overflow-x: auto;
+}
+.pipeline-row {
+  display: flex; align-items: center; gap: 0;
+  min-width: 700px;
+}
+.pipe-step {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  position: relative;
+}
+.pipe-step:not(:last-child)::after {
+  content: '';
+  position: absolute; top: 16px; left: calc(50% + 16px);
+  width: calc(100% - 32px); height: 1px;
+  background: var(--border2);
+}
+.pipe-step.done:not(:last-child)::after { background: var(--accent-d); }
+
+.pipe-circle {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; border: 2px solid var(--border2);
+  background: var(--panel); color: var(--text-s);
+  position: relative; z-index: 1;
+  transition: all .3s;
+}
+.pipe-step.done   .pipe-circle { border-color: var(--accent); background: var(--accent-d); color: #fff; }
+.pipe-step.active .pipe-circle { border-color: var(--blue); background: var(--blue); color: #fff; animation: pulse-glow 1.4s infinite; }
+.pipe-step.error  .pipe-circle { border-color: var(--red); background: #3a0c0c; color: var(--red); }
+@keyframes pulse-glow { 0%,100%{box-shadow:0 0 0 0 rgba(58,123,213,.4)} 50%{box-shadow:0 0 0 6px rgba(58,123,213,0)} }
+
+.pipe-label {
+  font-size: 10px; text-align: center; color: var(--text-m);
+  font-family: 'IBM Plex Mono', monospace; max-width: 72px; line-height: 1.3;
+}
+.pipe-step.done   .pipe-label { color: var(--accent); }
+.pipe-step.active .pipe-label { color: var(--blue-l); }
+
+/* ── Section card ────────────────────────────────────── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); margin-bottom: 20px; overflow: hidden;
+}
+.card-head {
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.card-head h3 {
+  font-family: 'Playfair Display', serif; font-size: 15px; color: var(--text-h);
+}
+.card-head .badge {
+  font-size: 10px; font-family: 'IBM Plex Mono', monospace;
+  padding: 2px 8px; border-radius: 20px; margin-left: auto;
+}
+.card-body { padding: 18px 20px; }
+
+/* ── Buttons ─────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 18px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  border: none; transition: all .2s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-l); }
+.btn-primary:disabled { background: var(--border2); color: var(--text-s); cursor: not-allowed; }
+.btn-secondary { background: var(--panel); color: var(--text); border: 1px solid var(--border2); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--text-h); }
+.btn-blue { background: var(--blue); color: #fff; }
+.btn-blue:hover { background: var(--blue-l); }
+.btn-green { background: var(--green); color: #fff; }
+.btn-green:hover { filter: brightness(1.1); }
+.btn-ghost { background: transparent; color: var(--text-m); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--panel); color: var(--text-h); }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid transparent; border-top-color: currentColor;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Action step ─────────────────────────────────────── */
+.action-step {
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 18px 20px; background: var(--panel); margin-bottom: 18px;
+}
+.action-step h4 { font-size: 13px; font-weight: 600; color: var(--text-h); margin-bottom: 4px; }
+.action-step p  { font-size: 12px; color: var(--text-m); margin-bottom: 12px; }
+
+/* ── Log terminal ─────────────────────────────────────── */
+.log-wrap {
+  background: #040608; border: 1px solid var(--border);
+  border-radius: var(--radius); font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px; padding: 12px 14px; max-height: 180px;
+  overflow-y: auto; color: #7a9ab8;
+}
+.log-line { line-height: 1.7; }
+.log-line .ts  { color: var(--text-s); margin-right: 8px; }
+.log-line .ev  { color: var(--accent); }
+.log-line .st  { color: var(--green); }
+.log-line.err  { color: var(--red); }
+
+/* ── Paper list ──────────────────────────────────────── */
+.paper-item {
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+  display: flex; gap: 14px;
+}
+.paper-item:last-child { border-bottom: none; }
+.paper-rank {
+  font-family: 'IBM Plex Mono', monospace; font-size: 18px;
+  color: var(--text-s); min-width: 28px; padding-top: 2px;
+}
+.paper-title { font-size: 13px; color: var(--text-h); font-weight: 500; margin-bottom: 3px; }
+.paper-meta  { font-size: 11px; color: var(--text-m); font-family: 'IBM Plex Mono', monospace; }
+.paper-score {
+  margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  color: var(--accent); align-self: flex-start; white-space: nowrap;
+}
+
+/* ── Gap cards ───────────────────────────────────────── */
+.gap-card {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 12px;
+  border-left: 3px solid var(--yellow);
+}
+.gap-card h4 { font-size: 13px; color: var(--text-h); margin-bottom: 4px; }
+.gap-card p  { font-size: 12px; color: var(--text-m); }
+.gap-severity {
+  display: inline-block; font-size: 10px; font-family: 'IBM Plex Mono', monospace;
+  padding: 2px 7px; border-radius: 20px; margin-bottom: 6px;
+}
+.sev-high   { background: rgba(192,57,43,.2); color: #e74c3c; border: 1px solid rgba(192,57,43,.4); }
+.sev-medium { background: rgba(212,171,46,.2); color: var(--yellow); border: 1px solid rgba(212,171,46,.4); }
+.sev-low    { background: rgba(40,168,106,.2); color: var(--green); border: 1px solid rgba(40,168,106,.4); }
+
+/* ── Draft section tabs ──────────────────────────────── */
+.tab-row {
+  display: flex; gap: 2px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); margin-bottom: 16px;
+}
+.tab {
+  padding: 7px 14px; font-size: 12px; cursor: pointer;
+  border-bottom: 2px solid transparent; color: var(--text-m);
+  transition: all .15s; font-family: 'IBM Plex Mono', monospace;
+}
+.tab:hover { color: var(--text-h); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.section-content {
+  font-size: 13.5px; color: var(--text); line-height: 1.8;
+  max-height: 400px; overflow-y: auto; white-space: pre-wrap;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Review scores ───────────────────────────────────── */
+.score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.score-item { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.score-name { font-size: 11px; color: var(--text-m); font-family: 'IBM Plex Mono', monospace; margin-bottom: 6px; }
+.score-val  { font-size: 22px; font-family: 'Playfair Display', serif; color: var(--text-h); }
+.score-bar  { height: 3px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.score-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+
+.rejection-risk {
+  padding: 12px 16px; border-radius: var(--radius);
+  border: 1px solid; margin-bottom: 16px; font-size: 13px;
+}
+.risk-low    { border-color: var(--green); background: rgba(40,168,106,.08); color: var(--green); }
+.risk-medium { border-color: var(--yellow); background: rgba(212,171,46,.08); color: var(--yellow); }
+.risk-high   { border-color: var(--red); background: rgba(192,57,43,.08); color: var(--red); }
+
+/* ── Assets ──────────────────────────────────────────── */
+.asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.asset-item {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; cursor: pointer; transition: border-color .2s;
+}
+.asset-item:hover { border-color: var(--border2); }
+.asset-type {
+  font-size: 10px; font-family: 'IBM Plex Mono', monospace;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 6px;
+}
+.asset-name { font-size: 12px; color: var(--text-h); word-break: break-all; }
+
+/* ── Citation list ───────────────────────────────────── */
+.citation-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.citation-item:last-child { border-bottom: none; }
+.cite-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.cite-verified { background: var(--green); }
+.cite-warning  { background: var(--yellow); }
+.cite-flagged  { background: var(--red); }
+.cite-bibtex { font-family: 'IBM Plex Mono', monospace; color: var(--text-m); flex: 1; }
+
+/* ── Form ─────────────────────────────────────────────── */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 12px; color: var(--text-m); margin-bottom: 6px; font-family: 'IBM Plex Mono', monospace; }
+.form-group input,
+.form-group textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border2);
+  border-radius: var(--radius); color: var(--text-h); font-size: 13px;
+  padding: 9px 12px; font-family: 'DM Sans', sans-serif;
+  transition: border-color .2s; resize: vertical;
+  outline: none;
+}
+.form-group input:focus,
+.form-group textarea:focus { border-color: var(--accent); }
+.form-group textarea { min-height: 100px; }
+
+/* ── Modal ───────────────────────────────────────────── */
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; backdrop-filter: blur(4px);
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--r-lg); width: 520px; max-width: 95vw;
+  max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0,0,0,.6);
+}
+.modal-head {
+  padding: 18px 22px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-head h3 { font-family: 'Playfair Display', serif; font-size: 17px; color: var(--text-h); }
+.modal-close { background: none; border: none; color: var(--text-m); cursor: pointer; font-size: 20px; line-height: 1; }
+.modal-close:hover { color: var(--text-h); }
+.modal-body { padding: 20px 22px; }
+.modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+/* ── Scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-s); }
+
+/* ── Empty/Loading states ────────────────────────────── */
+.empty-state {
+  text-align: center; padding: 40px 20px; color: var(--text-m);
+  font-size: 13px;
+}
+.empty-state .icon { font-size: 32px; margin-bottom: 10px; opacity: .5; }
+
+.loading-bar {
+  height: 2px; background: var(--border); border-radius: 2px;
+  overflow: hidden; margin-bottom: 16px;
+}
+.loading-bar::after {
+  content: ''; display: block; height: 100%;
+  background: var(--accent);
+  animation: loadbar 1.6s ease-in-out infinite;
+}
+@keyframes loadbar { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
+
+/* ── Util ─────────────────────────────────────────────── */
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.mt-12 { margin-top: 12px; }
+.mb-16 { margin-bottom: 16px; }
+.text-m  { color: var(--text-m); font-size: 12px; }
+.text-mono { font-family: 'IBM Plex Mono', monospace; }
+.hidden { display: none !important; }
+.w100 { width: 100%; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ── Sidebar ── -->
+  <aside id="sidebar">
+    <div class="sidebar-head">
+      <div class="logo-icon">R</div>
+      <div>
+        <div class="logo-text">ResearchOS</div>
+        <div class="logo-sub">v1.0.0 — pipeline</div>
+      </div>
+      <div class="ws-dot" id="ws-dot" title="WebSocket status"></div>
+    </div>
+    <button class="new-btn" onclick="openNewProject()">＋ New Project</button>
+    <div class="sidebar-label">Projects</div>
+    <div id="project-list">
+      <div class="empty-state text-m" id="sidebar-empty">No projects yet</div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <div id="main">
+    <div id="topbar">
+      <h2 id="topbar-title">ResearchOS</h2>
+      <span id="topbar-status" class="status-pill pill-idle hidden"></span>
+      <div class="topbar-spacer"></div>
+      <button id="del-btn" class="hidden" onclick="deleteProject()">Delete</button>
+    </div>
+    <div id="content">
+      <div id="welcome">
+        <div class="big-logo">⬡</div>
+        <h2 style="font-family:'Playfair Display',serif;color:var(--text-h);font-size:22px">Autonomous Research Pipeline</h2>
+        <p>Create a project to discover papers, analyse gaps, and generate a complete IEEE paper.</p>
+        <button class="btn btn-primary mt-12" onclick="openNewProject()">＋ Start a Project</button>
+      </div>
+      <div id="project-view" class="hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── New Project Modal ── -->
+<div class="modal-bg hidden" id="new-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>New Research Project</h3>
+      <button class="modal-close" onclick="closeModal('new-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Project Title</label>
+        <input id="np-title" type="text" placeholder="e.g. Agentic AI for Scientific Discovery" />
+      </div>
+      <div class="form-group">
+        <label>Research Idea</label>
+        <textarea id="np-idea" placeholder="Describe your research idea in detail. The system will search for relevant papers and identify gaps…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('new-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createProject()">Create &amp; Begin</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Approve Modal ── -->
+<div class="modal-bg hidden" id="approve-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Approve Gap Report</h3>
+      <button class="modal-close" onclick="closeModal('approve-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="text-m mb-16">Review the identified research gaps below. Once approved, the pipeline will proceed to generate a full draft.</p>
+      <div id="approve-gaps-list"></div>
+      <div class="form-group" style="margin-top:16px">
+        <label>Optional Edits / Notes</label>
+        <textarea id="approve-edits" placeholder="Leave empty to approve as-is, or add notes…" style="min-height:70px"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('approve-modal')">Cancel</button>
+      <button class="btn btn-green" onclick="submitApproval()">✓ Approve &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Draft Plan Modal ── -->
+<div class="modal-bg hidden" id="draft-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Configure Draft Plan</h3>
+      <button class="modal-close" onclick="closeModal('draft-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Target Venue</label>
+        <input id="dp-venue" type="text" value="NeurIPS" />
+      </div>
+      <div class="form-group">
+        <label>Sections (comma-separated)</label>
+        <input id="dp-sections" type="text" value="abstract,introduction,related_work,methodology,experiments,results,discussion,conclusion" />
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('draft-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitDraft()">Generate Draft</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────
+   CONFIG
+   ───────────────────────────────────────────────────────────────── */
+const BASE = 'http://localhost:8000/api/v1';
+const WS_BASE = 'ws://localhost:8000/ws';
+
+/* ─────────────────────────────────────────────────────────────────
+   STATE
+   ───────────────────────────────────────────────────────────────── */
+let projects = [];
+let currentProject = null;
+let ws = null;
+let pollTimer = null;
+let logLines = [];
+
+/* ─────────────────────────────────────────────────────────────────
+   UTILS
+   ───────────────────────────────────────────────────────────────── */
+const api = async (method, path, body) => {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    let msg = err.detail || r.statusText;
+    if (Array.isArray(msg)) {
+      msg = msg.map(m => `${m.loc.join('.')}: ${m.msg}`).join('\n');
+    }
+    throw new Error(msg);
+  }
+  const ct = r.headers.get('content-type') || '';
+  return ct.includes('application/json') ? r.json() : r.blob();
+};
+
+const $ = id => document.getElementById(id);
+const el = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html) e.innerHTML = html;
+  return e;
+};
+
+const statusColor = s => ({
+  idle:'#6a7a96', discovering:'#3a7bd5', analyzing:'#3a7bd5',
+  approved:'#d4ab2e', drafting:'#3a7bd5', refining:'#3a7bd5',
+  humanizing:'#3a7bd5', reviewing:'#3a7bd5',
+  complete:'#28a86a', error:'#c0392b'
+})[s] || '#6a7a96';
+
+const pillClass = s => {
+  if (['discovering','analyzing','drafting','refining','humanizing','reviewing'].includes(s)) return 'pill-running';
+  if (s === 'complete') return 'pill-complete';
+  if (s === 'error')    return 'pill-error';
+  if (s === 'approved') return 'pill-approved';
+  return 'pill-idle';
+};
+
+const ts = () => new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+const pushLog = (event, status, extra='') => {
+  logLines.push({ ts: ts(), event, status, extra });
+  if (logLines.length > 200) logLines.shift();
+  renderLogs();
+};
+
+const PIPELINE_STAGES = [
+  { key:'discovery',     label:'Discovery',     icon:'🔍' },
+  { key:'analysis',      label:'Analysis',      icon:'📄' },
+  { key:'gap_analysis',  label:'Gap Analysis',  icon:'🔬' },
+  { key:'approval',      label:'Approval',      icon:'✅' },
+  { key:'draft',         label:'Draft',         icon:'✍️' },
+  { key:'refinement',    label:'Refinement',    icon:'✨' },
+  { key:'humanization',  label:'Humanize',      icon:'🧬' },
+  { key:'review',        label:'Review',        icon:'👁' },
+  { key:'generation',    label:'Generate',      icon:'⚙️' },
+  { key:'export',        label:'Export',        icon:'📤' },
+];
+
+const stageFromStatus = s => ({
+  idle: null, discovering:'discovery', analyzing:'analysis',
+  approved:'approval', drafting:'draft', refining:'refinement',
+  humanizing:'humanization', reviewing:'review', complete:'export', error:null
+})[s];
+
+const doneStages = s => {
+  const order = ['discovery','analysis','gap_analysis','approval','draft','refinement','humanization','review','generation','export'];
+  const active = stageFromStatus(s);
+  const idx = order.indexOf(active);
+  if (s === 'complete') return order;
+  if (idx < 0) return [];
+  return order.slice(0, idx);
+};
+
+/* ─────────────────────────────────────────────────────────────────
+   PROJECT LIST
+   ───────────────────────────────────────────────────────────────── */
+async function loadProjects() {
+  try {
+    projects = await api('GET', '/projects');
+    renderSidebar();
+  } catch(e) {
+    console.warn('Backend not reachable:', e.message);
+    renderSidebar();
+  }
+}
+
+function renderSidebar() {
+  const list = $('project-list');
+  if (!projects.length) {
+    list.innerHTML = '<div class="empty-state text-m" style="padding:20px 14px">No projects yet.<br>Click + New Project to start.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  projects.forEach(p => {
+    const item = el('div', 'proj-item' + (currentProject?.id === p.id ? ' active' : ''));
+    item.innerHTML = `
+      <div class="proj-dot" style="background:${statusColor(p.status)}"></div>
+      <div>
+        <div class="proj-title">${p.title}</div>
+        <div class="proj-status-text">${p.status}</div>
+      </div>`;
+    item.onclick = () => selectProject(p.id);
+    list.appendChild(item);
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SELECT PROJECT
+   ───────────────────────────────────────────────────────────────── */
+async function selectProject(id) {
+  try {
+    currentProject = await api('GET', `/projects/${id}`);
+  } catch(e) {
+    currentProject = projects.find(p => p.id === id);
+  }
+  logLines = [];
+  renderSidebar();
+  renderTopbar();
+  renderProjectView();
+  connectWS(id);
+  startPolling(id);
+}
+
+function renderTopbar() {
+  if (!currentProject) return;
+  $('topbar-title').textContent = currentProject.title;
+  const pill = $('topbar-status');
+  pill.className = 'status-pill ' + pillClass(currentProject.status);
+  pill.textContent = currentProject.status;
+  pill.classList.remove('hidden');
+  $('del-btn').classList.remove('hidden');
+  $('welcome').classList.add('hidden');
+  $('project-view').classList.remove('hidden');
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PROJECT VIEW RENDER
+   ───────────────────────────────────────────────────────────────── */
+async function renderProjectView() {
+  const view = $('project-view');
+  view.innerHTML = '';
+  
+  let hasPapers = false;
+  let hasGaps = false;
+  let hasDraft = false;
+  try {
+     const pResp = await api('GET', `/projects/${currentProject.id}/papers?size=1`);
+     if (pResp.items && pResp.items.length > 0) hasPapers = true;
+     const gResp = await api('GET', `/projects/${currentProject.id}/gaps`);
+     if (gResp && gResp.length > 0) hasGaps = true;
+     const dResp = await api('GET', `/projects/${currentProject.id}/draft`);
+     if (dResp) hasDraft = true;
+  } catch(e) {}
+
+  // Pipeline stepper
+  view.appendChild(buildStepper());
+
+  // Active action card
+  view.appendChild(buildActionCard(hasPapers, hasGaps, hasDraft));
+
+  // Log terminal
+  view.appendChild(buildLogCard());
+
+  // Data panels
+  const status = currentProject.status;
+  if (['analyzing','idle','approved','drafting','refining','humanizing','reviewing','complete'].includes(status)) {
+    loadAndRenderPapers(view);
+  }
+  if (['approved','drafting','refining','humanizing','reviewing','complete'].includes(status)) {
+    loadAndRenderGaps(view);
+  }
+  if (['refining','humanizing','reviewing','complete'].includes(status)) {
+    loadAndRenderDraft(view);
+  }
+  if (['reviewing','complete'].includes(status)) {
+    loadAndRenderReview(view);
+    loadAndRenderCitations(view);
+  }
+  if (status === 'complete') {
+    loadAndRenderAssets(view);
+    renderExportCard(view);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   STEPPER
+   ───────────────────────────────────────────────────────────────── */
+function buildStepper() {
+  const wrap = el('div', 'pipeline-wrap');
+  const row  = el('div', 'pipeline-row');
+  const done = doneStages(currentProject.status);
+  const active = stageFromStatus(currentProject.status);
+
+  PIPELINE_STAGES.forEach(s => {
+    const step = el('div', 'pipe-step');
+    if (done.includes(s.key)) step.classList.add('done');
+    else if (s.key === active || (active === null && currentProject.status !== 'idle' && s.key === 'export')) {
+      step.classList.add(currentProject.status === 'error' ? 'error' : 'active');
+    }
+    step.innerHTML = `
+      <div class="pipe-circle">${done.includes(s.key) ? '✓' : s.icon}</div>
+      <div class="pipe-label">${s.label}</div>`;
+    row.appendChild(step);
+  });
+  wrap.appendChild(row);
+  return wrap;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ACTION CARD
+   ───────────────────────────────────────────────────────────────── */
+function buildActionCard(hasPapers=false, hasGaps=false, hasDraft=false) {
+  const card = el('div', 'card');
+  const head = el('div', 'card-head');
+  head.innerHTML = '<h3>Pipeline Actions</h3>';
+  const body = el('div', 'card-body');
+  const status = currentProject.status;
+  const running = ['discovering','analyzing','drafting','refining','humanizing','reviewing'].includes(status);
+
+  if (running) {
+    body.innerHTML = `
+      <div class="action-step">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="spinner" style="color:var(--blue-l);width:18px;height:18px;border-width:2.5px"></div>
+          <span style="color:var(--blue-l);font-size:13px">Running: <strong>${status}</strong></span>
+        </div>
+        <div class="loading-bar mt-12"></div>
+        <p class="text-m" style="margin-top:6px">The pipeline is working… watch the logs below for real-time updates.</p>
+      </div>`;
+  } else if (status === 'approved') {
+    body.innerHTML = `
+      <div class="action-step">
+        <h4>Step 5 — Generate Draft</h4>
+        <p>The gap report has been approved. Configure the writing plan and generate the full paper draft.</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="openDraftModal()">✍️ Configure &amp; Draft</button>
+        </div>
+      </div>`;
+  } else if (status === 'complete') {
+    body.innerHTML = `
+      <div class="action-step" style="border-color:var(--green)">
+        <h4 style="color:var(--green)">✓ Pipeline Complete</h4>
+        <p>All stages finished. Your paper is ready to export. See the Export section below.</p>
+        <div class="btn-row">
+          <button class="btn btn-green" onclick="downloadExport('pdf')">⬇ Download PDF</button>
+          <button class="btn btn-secondary" onclick="downloadExport('tex')">⬇ Download LaTeX</button>
+        </div>
+      </div>`;
+  } else if (status === 'error') {
+    body.innerHTML = `
+      <div class="action-step" style="border-color:var(--red)">
+        <h4 style="color:var(--red)">✗ Pipeline Error</h4>
+        <p>An error occurred. Check the logs below. You may retry from where it failed.</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="retryPipeline()">↺ Retry Last Stage</button>
+        </div>
+      </div>`;
+  } else if (status === 'idle') {
+    if (hasDraft) {
+      body.innerHTML = `<div class="action-step"><h4>Draft Generated</h4><p>Use the buttons in the Draft section below to refine, humanize, or review the paper.</p></div>`;
+    } else if (hasGaps) {
+      body.innerHTML = buildChainedActions('gaps_done');
+    } else if (hasPapers) {
+      body.innerHTML = buildChainedActions('papers_done');
+    } else {
+      body.innerHTML = `
+        <div class="action-step">
+          <h4>Step 1 — Discover Papers</h4>
+          <p>Search Semantic Scholar, CrossRef, and OpenAlex for relevant literature based on your research idea.</p>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="triggerDiscover()">🔍 Start Discovery</button>
+          </div>
+        </div>`;
+    }
+  } else {
+    body.innerHTML = buildChainedActions(status);
+  }
+  card.appendChild(head); card.appendChild(body);
+  return card;
+}
+
+function buildChainedActions(status) {
+  let html = '';
+  const steps = [
+    { id:'analyze-step',
+      title:'Step 2 — Analyse Papers',
+      desc:'Parse PDFs, extract figures/tables/equations, embed into Qdrant, and build the Neo4j knowledge graph.',
+      btn: `<button class="btn btn-primary" onclick="triggerAnalyze()">📄 Analyse Papers</button>` },
+    { id:'approve-step',
+      title:'Step 4 — Review &amp; Approve Gaps',
+      desc:'Human-in-the-loop: review the identified research gaps before the pipeline proceeds to writing.',
+      btn: `<button class="btn btn-yellow" style="background:var(--yellow);color:#000" onclick="openApproveModal()">✅ Review &amp; Approve</button>` },
+  ];
+
+  if (status === 'papers_done' || status === 'analyzing') {
+    html = `<div class="action-step"><h4>${steps[0].title}</h4><p>${steps[0].desc}</p><div class="btn-row">${steps[0].btn}</div></div>`;
+  } else if (status === 'gaps_done' || status === 'gap_analysis') {
+    html = `
+      <div class="action-step">
+        <h4>${steps[1].title}</h4>
+        <p>${steps[1].desc}</p>
+        <div class="btn-row">${steps[1].btn}</div>
+      </div>`;
+  } else if (status === 'drafting' || status === 'refining' || status === 'humanizing' || status === 'reviewing') {
+    html = `<div class="action-step"><h4>Writing in progress…</h4><p>Watch the logs for progress.</p></div>`;
+  }
+  return html;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   LOG CARD
+   ───────────────────────────────────────────────────────────────── */
+function buildLogCard() {
+  const card = el('div', 'card');
+  card.id = 'log-card';
+  card.innerHTML = `
+    <div class="card-head">
+      <h3>Live Pipeline Log</h3>
+      <span class="badge text-m text-mono" id="log-count">0 events</span>
+    </div>
+    <div class="card-body">
+      <div class="log-wrap" id="log-terminal">
+        <div class="log-line" style="color:var(--text-s)">— waiting for events —</div>
+      </div>
+    </div>`;
+  return card;
+}
+
+function renderLogs() {
+  const terminal = $('log-terminal');
+  if (!terminal) return;
+  if (!logLines.length) return;
+  terminal.innerHTML = logLines.map(l =>
+    `<div class="log-line ${l.status==='error'?'err':''}">
+      <span class="ts">${l.ts}</span>
+      <span class="ev">${l.event}</span>
+      ${l.status ? `<span class="st"> → ${l.status}</span>` : ''}
+      ${l.extra ? `<span style="color:var(--text-m)"> ${l.extra}</span>` : ''}
+    </div>`
+  ).join('');
+  terminal.scrollTop = terminal.scrollHeight;
+  const cnt = $('log-count');
+  if (cnt) cnt.textContent = `${logLines.length} events`;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PAPERS
+   ───────────────────────────────────────────────────────────────── */
+async function loadAndRenderPapers(view) {
+  const card = el('div', 'card');
+  card.id = 'papers-card';
+  card.innerHTML = `
+    <div class="card-head"><h3>Discovered Papers</h3><span class="badge text-m text-mono" id="paper-count">loading…</span></div>
+    <div class="card-body" id="papers-body"><div class="loading-bar"></div></div>`;
+  view.appendChild(card);
+  try {
+    const data = await api('GET', `/projects/${currentProject.id}/papers?size=50`);
+    const papers = data.items || [];
+    $('paper-count').textContent = `${data.total || papers.length} papers`;
+    const body = $('papers-body');
+    if (!papers.length) { body.innerHTML = '<div class="empty-state"><div class="icon">📭</div>No papers discovered yet</div>'; return; }
+    body.innerHTML = papers.map((p, i) => {
+      const authors = Array.isArray(p.authors)
+        ? p.authors.slice(0,2).map(a => typeof a === 'string' ? a : a.name || '').join(', ')
+        : '';
+      const score = p.relevance_score ? (p.relevance_score * 100).toFixed(0) + '%' : '';
+      return `<div class="paper-item">
+        <div class="paper-rank">${String(i+1).padStart(2,'0')}</div>
+        <div style="flex:1">
+          <div class="paper-title">${p.title || 'Untitled'}</div>
+          <div class="paper-meta">${authors}${p.year ? ' · ' + p.year : ''}${p.doi ? ' · ' + p.doi : ''}</div>
+          ${p.abstract ? `<div class="text-m" style="margin-top:4px;color:var(--text-m)">${p.abstract.slice(0,120)}…</div>` : ''}
+        </div>
+        ${score ? `<div class="paper-score">${score}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    $('papers-body').innerHTML = `<div class="empty-state"><div class="icon">📭</div>${e.message}</div>`;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   GAPS
+   ───────────────────────────────────────────────────────────────── */
+async function loadAndRenderGaps(view) {
+  const card = el('div', 'card');
+  card.id = 'gaps-card';
+  card.innerHTML = `
+    <div class="card-head">
+      <h3>Research Gaps</h3>
+      <span class="badge text-m text-mono" id="gaps-count">loading…</span>
+      ${currentProject.status !== 'approved' && currentProject.status !== 'complete' ?
+        '<button class="btn btn-ghost" style="margin-left:auto;font-size:12px;padding:5px 12px" onclick="openApproveModal()">Approve →</button>' : ''}
+    </div>
+    <div class="card-body" id="gaps-body"><div class="loading-bar"></div></div>`;
+  view.appendChild(card);
+  try {
+    const gaps = await api('GET', `/projects/${currentProject.id}/gaps`);
+    $('gaps-count').textContent = `${gaps.length} gaps`;
+    const body = $('gaps-body');
+    if (!gaps.length) { body.innerHTML = '<div class="empty-state"><div class="icon">🔬</div>No gaps identified yet</div>'; return; }
+    body.innerHTML = gaps.map(g => {
+      const sevClass = g.severity === 'high' ? 'sev-high' : g.severity === 'medium' ? 'sev-medium' : 'sev-low';
+      const contribs = (g.suggested_contributions || []).slice(0,3).map(c => `<li>${c}</li>`).join('');
+      return `<div class="gap-card">
+        <span class="gap-severity ${sevClass}">${(g.severity||'').toUpperCase()}</span>
+        <h4>${g.title || g.id || 'Research Gap'}</h4>
+        <p>${g.novelty_opportunity || ''}</p>
+        ${contribs ? `<ul style="margin-top:8px;padding-left:16px;font-size:12px;color:var(--text-m)">${contribs}</ul>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    const body = $('gaps-body');
+    if (body) body.innerHTML = `<div class="empty-state">${e.message}</div>`;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   DRAFT
+   ───────────────────────────────────────────────────────────────── */
+async function loadAndRenderDraft(view) {
+  const card = el('div', 'card');
+  card.id = 'draft-card';
+  card.innerHTML = `
+    <div class="card-head">
+      <h3>Paper Draft</h3>
+      <span class="badge text-m text-mono" id="draft-version">v—</span>
+      <div class="btn-row" style="margin-left:auto;gap:6px">
+        ${currentProject.status === 'idle' || ['drafting','refining','humanizing'].includes(currentProject.status) === false ? '' : ''}
+        ${currentProject.status !== 'complete' ?
+          `<button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="triggerRefine()">✨ Refine</button>
+           <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="triggerHumanize()">🧬 Humanize</button>
+           <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="triggerReview()">👁 Review</button>` : ''}
+      </div>
+    </div>
+    <div class="card-body" id="draft-body"><div class="loading-bar"></div></div>`;
+  view.appendChild(card);
+  try {
+    const draft = await api('GET', `/projects/${currentProject.id}/draft`);
+    const dv = $('draft-version');
+    if (dv) dv.textContent = `v${draft.version} · ${draft.status}`;
+    const sections = draft.sections || {};
+    const keys = Object.keys(sections);
+    const body = $('draft-body');
+    if (!keys.length) { body.innerHTML = '<div class="empty-state"><div class="icon">✍️</div>Draft not yet generated</div>'; return; }
+    let tabsHtml = `<div class="tab-row">${keys.map((k,i) =>
+      `<div class="tab${i===0?' active':''}" onclick="showDraftTab('${k}',this)">${k}</div>`
+    ).join('')}</div>`;
+    body.innerHTML = tabsHtml + `<div class="section-content" id="draft-content">${escHtml(sections[keys[0]] || '')}</div>`;
+    body._sections = sections;
+  } catch(e) {
+    const body = $('draft-body');
+    if (body) body.innerHTML = `<div class="empty-state">${e.message}</div>`;
+  }
+}
+
+function showDraftTab(key, tabEl) {
+  const body = $('draft-body');
+  const content = $('draft-content');
+  if (!content || !body._sections) return;
+  content.textContent = body._sections[key] || '';
+  body.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   REVIEW
+   ───────────────────────────────────────────────────────────────── */
+async function loadAndRenderReview(view) {
+  const card = el('div', 'card');
+  card.id = 'review-card';
+  card.innerHTML = `
+    <div class="card-head"><h3>Peer Review Simulation</h3></div>
+    <div class="card-body" id="review-body"><div class="loading-bar"></div></div>`;
+  view.appendChild(card);
+  try {
+    const report = await api('GET', `/projects/${currentProject.id}/review-report`);
+    const scores = report.reviewer_scores || {};
+    const risk = report.rejection_risk;
+    const body = $('review-body');
+
+    let riskHtml = '';
+    if (risk !== null && risk !== undefined) {
+      const riskPct = (risk * 100).toFixed(0);
+      const riskCls = risk < 0.3 ? 'risk-low' : risk < 0.6 ? 'risk-medium' : 'risk-high';
+      const riskLabel = risk < 0.3 ? 'Low Rejection Risk' : risk < 0.6 ? 'Medium Rejection Risk' : 'High Rejection Risk';
+      riskHtml = `<div class="rejection-risk ${riskCls}"><strong>${riskLabel}</strong> — ${riskPct}%</div>`;
+    }
+
+    const scoreKeys = Object.keys(scores);
+    const scoreGrid = scoreKeys.length ? `
+      <div class="score-grid">
+        ${scoreKeys.map(k => {
+          const val = Number(scores[k]).toFixed(1);
+          const pct = Math.min((scores[k] / 10) * 100, 100);
+          const fill = scores[k] >= 7 ? '#28a86a' : scores[k] >= 5 ? '#d4ab2e' : '#c0392b';
+          return `<div class="score-item">
+            <div class="score-name">${k.replace(/_/g,' ')}</div>
+            <div class="score-val">${val}<span style="font-size:14px;color:var(--text-m)">/10</span></div>
+            <div class="score-bar"><div class="score-fill" style="width:${pct}%;background:${fill}"></div></div>
+          </div>`;
+        }).join('')}
+      </div>` : '';
+
+    const feedbackSections = report.content || {};
+    const feedbackHtml = Object.entries(feedbackSections).slice(0,4).map(([k,v]) =>
+      typeof v === 'string' ? `<div style="margin-bottom:14px">
+        <div class="text-mono text-m" style="margin-bottom:4px">${k}</div>
+        <div class="text-m" style="color:var(--text);font-size:12.5px">${v.slice(0,300)}${v.length>300?'…':''}</div>
+      </div>` : ''
+    ).join('');
+
+    body.innerHTML = riskHtml + scoreGrid + (feedbackHtml ? `<div style="margin-top:8px">${feedbackHtml}</div>` : '');
+  } catch(e) {
+    const body = $('review-body');
+    if (body) body.innerHTML = `<div class="empty-state">${e.message}</div>`;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   CITATIONS
+   ───────────────────────────────────────────────────────────────── */
+async function loadAndRenderCitations(view) {
+  const card = el('div', 'card');
+  card.id = 'citations-card';
+  card.innerHTML = `
+    <div class="card-head"><h3>Citations</h3><span class="badge text-m text-mono" id="cite-count">loading…</span></div>
+    <div class="card-body" id="cite-body"><div class="loading-bar"></div></div>`;
+  view.appendChild(card);
+  try {
+    const citations = await api('GET', `/projects/${currentProject.id}/citations`);
+    const cnt = $('cite-count');
+    if (cnt) cnt.textContent = `${citations.length} citations`;
+    const body = $('cite-body');
+    if (!citations.length) { body.innerHTML = '<div class="empty-state"><div class="icon">📚</div>No citations yet</div>'; return; }
+    body.innerHTML = citations.map(c => {
+      const cls = c.validation_status === 'verified' ? 'cite-verified' : c.validation_status === 'warning' ? 'cite-warning' : 'cite-flagged';
+      return `<div class="citation-item">
+        <div class="cite-status ${cls}" title="${c.validation_status}"></div>
+        <div class="cite-bibtex">${escHtml((c.bibtex || '').slice(0,200))}${(c.bibtex||'').length>200?'…':''}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    const body = $('cite-body');
+    if (body) body.innerHTML = `<div class="empty-state">${e.message}</div>`;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   ASSETS
+   ───────────────────────────────────────────────────────────────── */
+async function loadAndRenderAssets(view) {
+  const card = el('div', 'card');
+  card.id = 'assets-card';
+  card.innerHTML = `
+    <div class="card-head">
+      <h3>Generated Assets</h3>
+      <div class="btn-row" style="margin-left:auto;gap:6px">
+        <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="triggerCodeGen()">⚙️ Gen Code</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:5px 10px" onclick="triggerDiagrams()">📊 Gen Diagrams</button>
+      </div>
+    </div>
+    <div class="card-body" id="assets-body"><div class="loading-bar"></div></div>`;
+  view.appendChild(card);
+  try {
+    const assets = await api('GET', `/projects/${currentProject.id}/assets`);
+    const body = $('assets-body');
+    if (!assets.length) { body.innerHTML = '<div class="empty-state"><div class="icon">⚙️</div>No assets yet — generate code or diagrams above</div>'; return; }
+    body.innerHTML = `<div class="asset-grid">${assets.map(a => `
+      <div class="asset-item">
+        <div class="asset-type">${a.asset_type}</div>
+        <div class="asset-name">${a.file_path ? a.file_path.split('/').pop() : a.id}</div>
+        <div class="text-m" style="margin-top:4px">${new Date(a.created_at).toLocaleDateString()}</div>
+      </div>`).join('')}</div>`;
+  } catch(e) {
+    const body = $('assets-body');
+    if (body) body.innerHTML = `<div class="empty-state">${e.message}</div>`;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   EXPORT CARD
+   ───────────────────────────────────────────────────────────────── */
+function renderExportCard(view) {
+  const card = el('div', 'card');
+  card.innerHTML = `
+    <div class="card-head"><h3>Export</h3></div>
+    <div class="card-body">
+      <p class="text-m mb-16">Export your paper in the format of your choice. The PDF uses IEEE two-column formatting.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="triggerExport('pdf')">🚀 Build PDF</button>
+        <button class="btn btn-secondary" onclick="triggerExport('tex')">Build LaTeX</button>
+        <button class="btn btn-secondary" onclick="triggerExport('docx')">Build DOCX</button>
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+        <p class="text-m mb-16">Download previously built exports:</p>
+        <div class="btn-row">
+          <button class="btn btn-green" onclick="downloadExport('pdf')">⬇ PDF</button>
+          <button class="btn btn-ghost" onclick="downloadExport('tex')">⬇ LaTeX</button>
+          <button class="btn btn-ghost" onclick="downloadExport('docx')">⬇ DOCX</button>
+        </div>
+      </div>
+    </div>`;
+  view.appendChild(card);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PIPELINE TRIGGERS
+   ───────────────────────────────────────────────────────────────── */
+async function triggerDiscover() {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/discover`), 'discovery');
+}
+async function triggerAnalyze() {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/analyze`), 'analysis');
+}
+async function triggerRefine() {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/refine`), 'refinement');
+}
+async function triggerHumanize() {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/humanize`), 'humanization');
+}
+async function triggerReview() {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/review`), 'review');
+}
+async function triggerCodeGen() {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/generate-code`), 'code_gen');
+}
+async function triggerDiagrams() {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/generate-diagrams`), 'diagrams');
+}
+async function triggerExport(fmt) {
+  await doTask(() => api('POST', `/projects/${currentProject.id}/export?fmt=${fmt}`), 'export');
+}
+
+async function doTask(fn, stageName) {
+  try {
+    pushLog(stageName, 'queued');
+    const task = await fn();
+    pushLog(stageName, 'task_id: ' + (task?.task_id || '?'));
+    await refreshProject();
+  } catch(e) {
+    pushLog(stageName, 'error', e.message);
+    alert('Error: ' + e.message);
+  }
+}
+
+async function retryPipeline() {
+  const status = currentProject.status;
+  if (status === 'error') await triggerDiscover();
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   APPROVAL MODAL
+   ───────────────────────────────────────────────────────────────── */
+async function openApproveModal() {
+  const list = $('approve-gaps-list');
+  list.innerHTML = '<div class="loading-bar"></div>';
+  $('approve-modal').classList.remove('hidden');
+  try {
+    const gaps = await api('GET', `/projects/${currentProject.id}/gaps`);
+    if (!gaps.length) { list.innerHTML = '<div class="text-m">No gaps found — check analysis logs.</div>'; return; }
+    list.innerHTML = gaps.map(g => {
+      const sevClass = g.severity === 'high' ? 'sev-high' : g.severity === 'medium' ? 'sev-medium' : 'sev-low';
+      return `<div class="gap-card" style="margin-bottom:10px">
+        <span class="gap-severity ${sevClass}">${(g.severity||'').toUpperCase()}</span>
+        <h4>${g.title || g.id || 'Gap'}</h4>
+        <p style="font-size:12px;color:var(--text-m)">${g.novelty_opportunity || ''}</p>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="text-m">${e.message}</div>`;
+  }
+}
+
+async function submitApproval() {
+  const edits = $('approve-edits').value.trim();
+  try {
+    await api('POST', `/projects/${currentProject.id}/approve`, {
+      user_edits: edits ? { notes: edits } : {},
+      approved_at: new Date().toISOString()
+    });
+    pushLog('approval', 'approved');
+    closeModal('approve-modal');
+    await refreshProject();
+  } catch(e) {
+    pushLog('approval', 'error', e.message);
+    alert('Approval failed: ' + e.message);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   DRAFT MODAL
+   ───────────────────────────────────────────────────────────────── */
+function openDraftModal() { $('draft-modal').classList.remove('hidden'); }
+
+async function submitDraft() {
+  const venue = $('dp-venue').value.trim() || 'NeurIPS';
+  const sections = $('dp-sections').value.split(',').map(s => s.trim()).filter(Boolean);
+  closeModal('draft-modal');
+  try {
+    const task = await api('POST', `/projects/${currentProject.id}/draft`, {
+      plan: { target_venue: venue, sections }
+    });
+    pushLog('draft', 'queued', 'task: ' + task.task_id);
+    await refreshProject();
+  } catch(e) {
+    pushLog('draft', 'error', e.message);
+    alert('Draft failed: ' + e.message);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   NEW PROJECT MODAL
+   ───────────────────────────────────────────────────────────────── */
+function openNewProject() { $('new-modal').classList.remove('hidden'); }
+
+async function createProject() {
+  const title = $('np-title').value.trim();
+  const idea  = $('np-idea').value.trim();
+  
+  if (!title || !idea) { 
+    alert('Please fill in both fields.'); 
+    return; 
+  }
+  if (title.length < 3) {
+    alert('Title must be at least 3 characters long.');
+    return;
+  }
+  if (idea.length < 10) {
+    alert('Research Idea must be at least 10 characters long.');
+    return;
+  }
+  
+  try {
+    const proj = await api('POST', '/projects', { title, research_idea: idea });
+    projects.unshift(proj);
+    closeModal('new-modal');
+    $('np-title').value = ''; $('np-idea').value = '';
+    await selectProject(proj.id);
+  } catch(e) {
+    alert('Failed to create project: ' + e.message);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   DELETE PROJECT
+   ───────────────────────────────────────────────────────────────── */
+async function deleteProject() {
+  if (!currentProject) return;
+  if (!confirm(`Delete "${currentProject.title}"?`)) return;
+  try {
+    await api('DELETE', `/projects/${currentProject.id}`);
+    projects = projects.filter(p => p.id !== currentProject.id);
+    currentProject = null;
+    disconnectWS();
+    clearPoll();
+    $('topbar-title').textContent = 'ResearchOS';
+    $('topbar-status').classList.add('hidden');
+    $('del-btn').classList.add('hidden');
+    $('project-view').classList.add('hidden');
+    $('welcome').classList.remove('hidden');
+    renderSidebar();
+  } catch(e) { alert('Delete failed: ' + e.message); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   EXPORT DOWNLOAD
+   ───────────────────────────────────────────────────────────────── */
+async function downloadExport(fmt) {
+  try {
+    const blob = await api('GET', `/projects/${currentProject.id}/export/${fmt}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `paper.${fmt}`; a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Download failed — export may not be ready yet.\n' + e.message); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   WEBSOCKET
+   ───────────────────────────────────────────────────────────────── */
+function connectWS(id) {
+  disconnectWS();
+  try {
+    ws = new WebSocket(`${WS_BASE}/${id}`);
+    ws.onopen = () => { $('ws-dot').className = 'ws-dot connected'; pushLog('websocket', 'connected'); };
+    ws.onclose = () => { $('ws-dot').className = 'ws-dot'; };
+    ws.onerror = () => { $('ws-dot').className = 'ws-dot error'; };
+    ws.onmessage = async (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        const stage = msg.stage || msg.event || '?';
+        const status = msg.status || msg.state || '';
+        const detail = msg.details ? JSON.stringify(msg.details).slice(0,80) : '';
+        pushLog(stage, status, detail);
+        if (['complete','idle','error'].includes(status) || ['complete','idle','error'].includes(msg.project_status)) {
+          await refreshProject();
+        }
+      } catch(_) {}
+    };
+  } catch(e) { console.warn('WS failed:', e); }
+}
+
+function disconnectWS() {
+  if (ws) { try { ws.close(); } catch(_){} ws = null; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   POLLING FALLBACK
+   ───────────────────────────────────────────────────────────────── */
+function startPolling(id) {
+  clearPoll();
+  pollTimer = setInterval(async () => {
+    if (!currentProject) return;
+    try {
+      const fresh = await api('GET', `/projects/${id}`);
+      if (fresh.status !== currentProject.status) {
+        currentProject = fresh;
+        renderTopbar();
+        renderProjectView();
+        renderSidebar();
+      }
+    } catch(_) {}
+  }, 4000);
+}
+
+function clearPoll() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   REFRESH
+   ───────────────────────────────────────────────────────────────── */
+async function refreshProject() {
+  if (!currentProject) return;
+  try {
+    currentProject = await api('GET', `/projects/${currentProject.id}`);
+    renderTopbar();
+    renderProjectView();
+    renderSidebar();
+  } catch(e) { console.warn('Refresh failed:', e.message); }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   MODAL HELPERS
+   ───────────────────────────────────────────────────────────────── */
+function closeModal(id) { $(id).classList.add('hidden'); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') ['new-modal','approve-modal','draft-modal'].forEach(closeModal);
+});
+
+/* ─────────────────────────────────────────────────────────────────
+   UTILITY
+   ───────────────────────────────────────────────────────────────── */
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   INIT
+   ───────────────────────────────────────────────────────────────── */
+loadProjects();
+</script>
+</body>
+</html>
