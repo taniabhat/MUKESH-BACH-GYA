@@ -2,8 +2,9 @@ import React, { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useProject } from '../../hooks/useProject'
 import StatusPill from './StatusPill'
+import { FaAngleDoubleLeft } from 'react-icons/fa'
 
-export default function GlobalSidebar({ isOpen, onToggle, onNewProject }) {
+export default function GlobalSidebar({ isOpen, onToggle, onNewProject, widthPct, isDragging }) {
   const { projects, currentProject } = useApp()
   const { selectProject, deleteProject } = useProject()
   const { wsStatus } = useApp()
@@ -24,24 +25,30 @@ export default function GlobalSidebar({ isOpen, onToggle, onNewProject }) {
   return (
     <aside
       id="global-sidebar"
-      className="sidebar-transition flex flex-col border-r border-[#0c2040] overflow-hidden flex-shrink-0"
+      className="flex flex-col border-r border-[#0c2040] overflow-hidden flex-shrink-0"
       style={{
-        width: isOpen ? 260 : 0,
+        width: isOpen ? `${widthPct}%` : 0,
         opacity: isOpen ? 1 : 0,
         background: 'var(--sidebar-bg)',
         backdropFilter: 'blur(20px)',
         borderRight: `1px solid var(--sidebar-border)`,
+        transition: isDragging ? 'none' : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease'
       }}
     >
       {/* Sidebar Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-[#0c2040]">
-        <span className="font-mono text-[10px] text-[#4a6fa5] uppercase tracking-widest">Projects</span>
+        <span 
+          className="text-[20px] text-[#e0f2fe] uppercase font-bold tracking-widest"
+          style={{ fontFamily: "'Playfair Display', serif" }}
+        >
+          Projects
+        </span>
         <button
           id="sidebar-close-btn"
           onClick={onToggle}
           className="text-[#4a6fa5] hover:text-[#e0f2fe] transition-colors text-lg"
         >
-          ×
+          <FaAngleDoubleLeft />
         </button>
       </div>
 
@@ -49,9 +56,9 @@ export default function GlobalSidebar({ isOpen, onToggle, onNewProject }) {
       <button
         id="new-project-btn"
         onClick={onNewProject}
-        className="mx-3 mt-3 flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[#1a3a6e] text-[#38bdf8] text-[13px] font-medium hover:bg-[#2563eb]/10 hover:border-[#2563eb] transition-all"
+        className="mx-3 mt-3 flex items-center justify-center gap-2 px-3 py-3 rounded-xl border border-[#1a3a6e] text-[#38bdf8] text-[16px] font-bold hover:bg-[#2563eb]/10 hover:border-[#2563eb] transition-all"
       >
-        <span className="text-lg leading-none">＋</span> New Project
+        <span className="text-[22px] leading-none">＋</span> New Project
       </button>
 
       {/* Project List */}

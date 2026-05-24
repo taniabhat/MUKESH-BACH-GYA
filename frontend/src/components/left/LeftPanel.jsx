@@ -14,27 +14,33 @@ export default function LeftPanel({ onSidebarToggle, onProjectCreated, style }) 
         ...style,
       }}
     >
-      {/* Brand Header */}
-      <BrandHeader onSidebarToggle={onSidebarToggle} />
-
-      {/* Prompt Input Block */}
-      <PromptInputBlock onProjectCreated={onProjectCreated} />
-
-      {/* Separator */}
+      {/* Inner wrapper — 20px gap from both resize bars */}
       <div
-        className="mx-4 mb-1 flex items-center gap-2"
-        style={{ borderTop: '1px solid var(--border)' }}
+        className="flex flex-col h-full overflow-hidden"
+        style={{ margin: '5px 10px' }}
       >
-        <span
-          className="font-mono text-[9px] uppercase tracking-widest py-2"
-          style={{ color: 'var(--text-s)' }}
-        >
-          Conversation
-        </span>
-      </div>
+        {/* Brand Header */}
+        <BrandHeader onSidebarToggle={onSidebarToggle} />
 
-      {/* Chat + Log */}
-      <ChatHistory />
+        {/* Prompt Input Block */}
+        <PromptInputBlock onProjectCreated={onProjectCreated} />
+
+        {/* Separator */}
+        <div
+          style={{ borderTop: '2px solid var(--border)', marginTop: '24px', marginBottom: '4px' }}
+          className="flex items-center gap-2"
+        >
+          <span
+            className="font-display text-[16px] uppercase font-bold tracking-widest py-2"
+            style={{ color: 'var(--text-h)' }}
+          >
+            Conversation
+          </span>
+        </div>
+
+        {/* Chat + Log */}
+        <ChatHistory />
+      </div>
     </div>
   )
 }

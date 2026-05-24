@@ -7,7 +7,7 @@ export default function BrandHeader({ onSidebarToggle }) {
   return (
     <div
       id="brand-header"
-      className="flex items-center gap-3 px-5 py-4 flex-shrink-0"
+      className="flex items-center gap-3 px-2 py-4 flex-shrink-0"
       style={{ borderBottom: 'var(--left-panel-border)' }}
     >
       {/* Sidebar Toggle */}
@@ -26,8 +26,8 @@ export default function BrandHeader({ onSidebarToggle }) {
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
         style={{
-          background: 'linear-gradient(135deg, #E91E63 0%, #D80073 100%)',
-          boxShadow: '0 4px 16px rgba(216, 0, 115, 0.3)',
+          background: 'linear-gradient(135deg, #8B008B, #D80073)',
+          boxShadow: '0 4px 12px rgba(139,0,139,0.3)',
         }}
       >
         <span className="font-display font-bold text-[17px] text-white leading-none">R</span>
@@ -36,16 +36,13 @@ export default function BrandHeader({ onSidebarToggle }) {
       {/* Brand Text */}
       <div className="flex-1 min-w-0">
         <div
-          className="font-display text-[15px] font-semibold leading-tight"
-          style={{ color: 'var(--text-h)' }}
+          className="text-[26px] font-bold leading-tight"
+          style={{ 
+            fontFamily: "'Playfair Display', serif",
+            color: '#000000'
+          }}
         >
           ResearchOS
-        </div>
-        <div
-          className="font-mono text-[10px] leading-tight"
-          style={{ color: 'var(--text-m)' }}
-        >
-          v2.0 — agentic pipeline
         </div>
       </div>
 

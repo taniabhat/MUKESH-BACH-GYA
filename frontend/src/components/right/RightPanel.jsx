@@ -7,6 +7,7 @@ import PapersPanel, {
   GapsPanel, DraftPanel, CitationsPanel, AssetsPanel, ExportPanel
 } from './PapersPanel'
 import { useApp } from '../../context/AppContext'
+import { FaFlask, FaSearch, FaFileAlt, FaMicroscope, FaPen, FaEye, FaFileExport } from 'react-icons/fa'
 
 export default function RightPanel({ style }) {
   const { currentProject, humanReview } = useApp()
@@ -74,9 +75,9 @@ function IdleWorkspace() {
           boxShadow: 'var(--idle-icon-shadow)',
         }}
       >
-        <span className="text-4xl">🧪</span>
+        <FaFlask className="text-4xl text-[#D80073]" />
       </div>
-      <h2 className="font-display text-[22px] text-[#e0f2fe] mb-3">
+      <h2 className="font-display text-[26px] uppercase font-bold text-[#e0f2fe] mb-3">
         Workspace Canvas
       </h2>
       <p className="text-[13px] text-[#4a6fa5] max-w-[320px] leading-relaxed">
@@ -86,17 +87,24 @@ function IdleWorkspace() {
 
       {/* Feature Chips */}
       <div className="flex flex-wrap gap-2 justify-center mt-8">
-        {['🔍 Discovery', '📄 Analysis', '🔬 Gap Detection', '✍️ Drafting', '👁 Peer Review', '📤 Export'].map(f => (
+        {[
+          { icon: <FaSearch />, text: 'Discovery' },
+          { icon: <FaFileAlt />, text: 'Analysis' },
+          { icon: <FaMicroscope />, text: 'Gap Detection' },
+          { icon: <FaPen />, text: 'Drafting' },
+          { icon: <FaEye />, text: 'Peer Review' },
+          { icon: <FaFileExport />, text: 'Export' }
+        ].map(f => (
           <span
-            key={f}
-            className="px-3 py-1.5 rounded-full font-mono text-[10px] border"
+            key={f.text}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full font-mono text-[11px] border"
             style={{
               background: 'var(--idle-chip-bg)',
               borderColor: 'var(--border)',
               color: 'var(--text-m)',
             }}
           >
-            {f}
+            {f.icon} {f.text}
           </span>
         ))}
       </div>

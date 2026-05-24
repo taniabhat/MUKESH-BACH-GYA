@@ -4,25 +4,25 @@
 :root {
   color-scheme: light;
   /* Core Palette */
-  --bg:       #FAF5F0;
-  --surface:  #FFFFFF;
-  --panel:    #FFFFFF;
-  --border:   #E5E7EB;
-  --border2:  #D1D5DB;
-  --accent:   #D80073;
-  --accent-l: #E91E63;
-  --accent-d: #C2185B;
-  --sky:      #D80073; /* Keeping naming for simplicity, but mapping to magenta */
-  --sky-l:    #FCE4EC;
-  --sky-d:    #AD1457;
+  --bg:       #D2B48C; /* dark beige */
+  --surface:  #FDF5E6; /* old lace */
+  --panel:    #FDF5E6;
+  --border:   #C2A88A;
+  --border2:  #B0967A;
+  --accent:   #8B008B; /* dark magenta */
+  --accent-l: #A020F0;
+  --accent-d: #4B0082;
+  --sky:      #8B008B; 
+  --sky-l:    #E6E6FA;
+  --sky-d:    #4B0082;
   --green:    #10B981;
   --red:      #EF4444;
   --yellow:   #F59E0B;
   
   --text-h:   #111827;
   --text:     #374151;
-  --text-m:   #6B7280;
-  --text-s:   #9CA3AF;
+  --text-m:   #4B5563;
+  --text-s:   #6B7280;
   
   --radius:   8px;
   --r-lg:     14px;
@@ -308,6 +308,7 @@ html, body, #root {
   background: var(--border);
   flex-shrink: 0;
   position: relative;
+  z-index: 50;
   transition: background 0.2s;
 }
 .resize-handle::before {

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useProject } from '../../hooks/useProject'
+import { FaMicroscope, FaBook, FaPen } from 'react-icons/fa'
 
 const REVIEWERS = [
   {
     id: 'reviewer-a',
     name: 'Reviewer A',
     persona: 'Methodology Expert',
-    icon: '🔬',
+    icon: <FaMicroscope />,
     color: '#2563eb',
     scoreKeys: ['methodology', 'experimental_design', 'rigor'],
     accentClass: 'border-blue-700/30',
@@ -17,7 +18,7 @@ const REVIEWERS = [
     id: 'reviewer-b',
     name: 'Reviewer B',
     persona: 'Literature Expert',
-    icon: '📚',
+    icon: <FaBook />,
     color: '#0ea5e9',
     scoreKeys: ['novelty', 'related_work', 'contribution'],
     accentClass: 'border-sky-700/30',
@@ -27,7 +28,7 @@ const REVIEWERS = [
     id: 'reviewer-c',
     name: 'Reviewer C',
     persona: 'Presentation Expert',
-    icon: '✍️',
+    icon: <FaPen />,
     color: '#38bdf8',
     scoreKeys: ['clarity', 'writing_quality', 'presentation'],
     accentClass: 'border-cyan-700/30',
@@ -59,11 +60,11 @@ export default function ReviewerCards() {
   const content = report?.content || {}
 
   return (
-    <div id="reviewer-cards-section" className="px-5 pb-4">
+    <div id="reviewer-cards-section" className="px-5 mb-8">
       {/* Section Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="font-display text-[15px] text-[#e0f2fe] font-semibold">Peer Review Simulation</h3>
+          <h3 className="font-display text-[20px] uppercase text-[#e0f2fe] font-bold">Peer Review Simulation</h3>
           {risk !== undefined && risk !== null && (
             <RejectionRisk risk={risk} />
           )}

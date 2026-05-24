@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useProject } from '../../hooks/useProject'
+import { FaInbox, FaMicroscope, FaPen, FaBook, FaCog, FaChartBar, FaRocket, FaDownload } from 'react-icons/fa'
 
 export default function PapersPanel() {
   const { currentProject } = useApp()
@@ -24,7 +25,7 @@ export default function PapersPanel() {
 
   return (
     <SectionCard id="papers-panel" title="Discovered Papers" badge={loading ? '…' : `${total} papers`}>
-      {loading ? <ShimmerList /> : papers.length === 0 ? <Empty icon="📭" text="No papers discovered yet" /> : (
+      {loading ? <ShimmerList /> : papers.length === 0 ? <Empty icon={<FaInbox />} text="No papers discovered yet" /> : (
         <div className="flex flex-col divide-y divide-[#0c2040]">
           {papers.slice(0, 30).map((p, i) => {
             const authors = Array.isArray(p.authors)
@@ -77,7 +78,7 @@ export function GapsPanel() {
 
   return (
     <SectionCard id="gaps-panel" title="Research Gaps" badge={loading ? '…' : `${gaps.length} gaps`}>
-      {loading ? <ShimmerList /> : gaps.length === 0 ? <Empty icon="🔬" text="No gaps identified yet" /> : (
+      {loading ? <ShimmerList /> : gaps.length === 0 ? <Empty icon={<FaMicroscope />} text="No gaps identified yet" /> : (
         <div className="flex flex-col gap-3">
           {gaps.map((g, i) => {
             const sevCls = g.severity === 'high' ? 'sev-high' : g.severity === 'medium' ? 'sev-medium' : 'sev-low'
@@ -133,7 +134,7 @@ export function DraftPanel() {
       title="Paper Draft"
       badge={draft ? `v${draft.version} · ${draft.status}` : loading ? '…' : '—'}
     >
-      {loading ? <ShimmerList /> : !keys.length ? <Empty icon="✍️" text="Draft not yet generated" /> : (
+      {loading ? <ShimmerList /> : !keys.length ? <Empty icon={<FaPen />} text="Draft not yet generated" /> : (
         <>
           <div className="flex gap-0 border-b border-[#0c2040] mb-4 overflow-x-auto">
             {keys.map(k => (
@@ -177,7 +178,7 @@ export function CitationsPanel() {
 
   return (
     <SectionCard id="citations-panel" title="Citations" badge={loading ? '…' : `${citations.length} citations`}>
-      {loading ? <ShimmerList /> : citations.length === 0 ? <Empty icon="📚" text="No citations yet" /> : (
+      {loading ? <ShimmerList /> : citations.length === 0 ? <Empty icon={<FaBook />} text="No citations yet" /> : (
         <div className="flex flex-col divide-y divide-[#0c2040]">
           {citations.map((c, i) => {
             const dotCls = c.validation_status === 'verified' ? 'bg-[#10b981]' : c.validation_status === 'warning' ? 'bg-[#f59e0b]' : 'bg-[#ef4444]'
@@ -222,12 +223,12 @@ export function AssetsPanel() {
       title="Generated Assets"
       headerRight={
         <div className="flex gap-2">
-          <GhostBtn onClick={genCode}>⚙️ Code</GhostBtn>
-          <GhostBtn onClick={genDiag}>📊 Diagrams</GhostBtn>
+          <GhostBtn onClick={genCode}><FaCog className="inline" /> Code</GhostBtn>
+          <GhostBtn onClick={genDiag}><FaChartBar className="inline" /> Diagrams</GhostBtn>
         </div>
       }
     >
-      {loading ? <ShimmerList /> : assets.length === 0 ? <Empty icon="⚙️" text="Generate code or diagrams above" /> : (
+      {loading ? <ShimmerList /> : assets.length === 0 ? <Empty icon={<FaCog />} text="Generate code or diagrams above" /> : (
         <div className="grid grid-cols-2 gap-2.5">
           {assets.map((a, i) => (
             <div key={i} className="p-3 rounded-xl border border-[#1a3a6e] bg-[#0c1f3a]/50">
@@ -269,7 +270,7 @@ export function ExportPanel() {
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[12.5px] font-medium text-white transition-all disabled:opacity-50 hover:scale-[1.02]"
             style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', boxShadow: '0 4px 16px rgba(37,99,235,0.25)' }}
           >
-            {building === fmt ? <Spin /> : '🚀'} {fmt === 'pdf' ? 'Build PDF' : fmt === 'tex' ? 'LaTeX' : 'DOCX'}
+            {building === fmt ? <Spin /> : <FaRocket />} {fmt === 'pdf' ? 'Build PDF' : fmt === 'tex' ? 'LaTeX' : 'DOCX'}
           </button>
         ))}
       </div>
@@ -283,7 +284,7 @@ export function ExportPanel() {
               onClick={() => downloadExport(fmt)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#1a3a6e] text-[11.5px] text-[#93c5fd] hover:text-[#e0f2fe] hover:border-[#2563eb] transition-all"
             >
-              ⬇ {fmt.toUpperCase()}
+              <FaDownload /> {fmt.toUpperCase()}
             </button>
           ))}
         </div>
@@ -295,9 +296,9 @@ export function ExportPanel() {
 // ── Shared Utilities ──────────────────────────────────────
 function SectionCard({ id, title, badge, headerRight, children }) {
   return (
-    <div id={id} className="mx-5 mb-4 clay-card overflow-hidden animate-fade-in-up">
+    <div id={id} className="mx-5 mb-8 clay-card overflow-hidden animate-fade-in-up">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#0c2040]">
-        <h3 className="font-display text-[14px] text-[#e0f2fe] font-semibold">{title}</h3>
+        <h3 className="font-display text-[20px] uppercase text-[#e0f2fe] font-bold">{title}</h3>
         {badge && <span className="font-mono text-[10px] text-[#4a6fa5]">{badge}</span>}
         {headerRight}
       </div>

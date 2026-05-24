@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
+import { FaRobot, FaServer, FaCube } from 'react-icons/fa'
 
 export default function ChatHistory() {
   const { chatHistory, logLines } = useApp()
@@ -17,7 +18,7 @@ export default function ChatHistory() {
   return (
     <div className="flex-1 overflow-y-auto flex flex-col">
       {/* ── Chat Messages ─────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2.5">
+      <div className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-2.5">
         {chatHistory.length === 0 ? (
           <WelcomeState />
         ) : (
@@ -30,7 +31,7 @@ export default function ChatHistory() {
 
       {/* ── Live Log Terminal ──────────────────────────── */}
       {logLines.length > 0 && (
-        <div className="px-4 pb-3 flex-shrink-0">
+        <div className="px-2 pb-3 flex-shrink-0">
           <div className="flex items-center justify-between mb-1.5">
             <span className="font-mono text-[9px] text-[#1e3a5f] uppercase tracking-widest">
               Live Log
@@ -73,8 +74,8 @@ function ChatMessage({ msg }) {
       >
         {msg.content}
       </div>
-      <span className="font-mono text-[9px] text-[#1e3a5f] px-1">
-        {msg.role === 'user' ? 'You' : msg.role === 'agent' ? '⚙ Agent' : '◈ System'} · {msg.ts}
+      <span className="flex items-center gap-1 font-mono text-[9px] text-[#1e3a5f] px-1">
+        {msg.role === 'user' ? 'You' : msg.role === 'agent' ? <><FaRobot /> Agent</> : <><FaServer /> System</>} · {msg.ts}
       </span>
     </div>
   )
@@ -91,7 +92,7 @@ function WelcomeState() {
           boxShadow: '0 8px 32px rgba(37,99,235,0.1)',
         }}
       >
-        <span className="text-3xl">⬡</span>
+        <FaCube className="text-3xl text-blue-500" />
       </div>
       <h2 className="font-display text-[18px] text-[#e0f2fe] mb-2">Autonomous Research Pipeline</h2>
       <p className="text-[12.5px] text-[#4a6fa5] max-w-[240px] leading-relaxed">

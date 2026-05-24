@@ -9,6 +9,7 @@ import GlobalSidebar from './components/shared/GlobalSidebar'
 function AppInner() {
   const { loadProjects } = useProject()
   const { leftPct, onMouseDown } = useResize(42, 28, 60)
+  const { leftPct: sidebarPct, onMouseDown: onSidebarResize, isDragging: isSidebarDragging } = useResize(18, 12, 35)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => { loadProjects() }, [loadProjects])
@@ -24,7 +25,16 @@ function AppInner() {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(o => !o)}
         onNewProject={() => setSidebarOpen(false)}
+        widthPct={sidebarPct}
+        isDragging={isSidebarDragging}
       />
+      {sidebarOpen && (
+        <div
+          className="resize-handle"
+          onMouseDown={onSidebarResize}
+          title="Drag to resize sidebar"
+        />
+      )}
 
       {/* Left Panel (Driver / Chat) */}
       <LeftPanel

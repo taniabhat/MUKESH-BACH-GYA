@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useProject } from '../../hooks/useProject'
+import { FaFileAlt, FaBullseye, FaCog, FaBolt, FaSearch, FaCheckCircle, FaPen, FaStar, FaDna, FaEye } from 'react-icons/fa'
 
 export default function PromptInputBlock({ onProjectCreated }) {
   const { currentProject, isRunning, pushChat } = useApp()
@@ -61,7 +62,7 @@ export default function PromptInputBlock({ onProjectCreated }) {
   const isIdle    = status === 'idle' || !status
 
   return (
-    <div className="px-4 py-4 flex flex-col gap-3 flex-shrink-0">
+    <div className="px-2 pt-6 pb-6 flex flex-col gap-3 flex-shrink-0">
       {/* Input Container */}
       <div
         className="rounded-2xl border overflow-hidden"
@@ -73,8 +74,8 @@ export default function PromptInputBlock({ onProjectCreated }) {
       >
         {/* Topic Field */}
         <div className="px-4 pt-4 pb-2">
-          <label className="block font-mono text-[10px] text-[#4a6fa5] uppercase tracking-widest mb-2">
-            📄 Topic / Paper Draft
+          <label className="flex items-center gap-1.5 font-mono text-[13px] font-bold text-[#4a6fa5] uppercase tracking-widest mb-2">
+            <FaFileAlt /> Topic / Paper Draft
           </label>
           <textarea
             id="prompt-topic"
@@ -92,8 +93,8 @@ export default function PromptInputBlock({ onProjectCreated }) {
 
         {/* Research Goals Field */}
         <div className="px-4 pt-3 pb-2">
-          <label className="block font-mono text-[10px] text-[#4a6fa5] uppercase tracking-widest mb-2">
-            🎯 Research Goals
+          <label className="flex items-center gap-1.5 font-mono text-[13px] font-bold text-[#4a6fa5] uppercase tracking-widest mb-2">
+            <FaBullseye /> Research Goals
           </label>
           <textarea
             id="prompt-goals"
@@ -110,10 +111,10 @@ export default function PromptInputBlock({ onProjectCreated }) {
         <div className="px-4 pt-1 pb-3">
           <button
             onClick={() => setGuideOpen(o => !o)}
-            className="flex items-center gap-2 font-mono text-[10px] text-[#4a6fa5] uppercase tracking-widest hover:text-[#38bdf8] transition-colors mb-2"
+            className="flex items-center gap-2 font-mono text-[13px] font-bold text-[#4a6fa5] uppercase tracking-widest hover:text-[#38bdf8] transition-colors mb-2"
           >
             <span className={`transition-transform duration-200 ${guideOpen ? 'rotate-90' : ''}`}>▶</span>
-            ⚙️ Custom Guidelines
+            <FaCog /> Custom Guidelines
           </button>
           {guideOpen && (
             <textarea
@@ -144,7 +145,7 @@ export default function PromptInputBlock({ onProjectCreated }) {
             </span>
           ) : (
             <span className="flex items-center justify-center gap-2">
-              <span className="text-[18px]">⚡</span> Initialize Agent
+              <span className="text-[18px]"><FaBolt /></span> Initialize Agent
             </span>
           )}
         </button>
@@ -211,8 +212,8 @@ export default function PromptInputBlock({ onProjectCreated }) {
             />
           </div>
           <div className="flex gap-2">
-            <button onClick={handleDraftSubmit} className="run-btn flex-1 py-2.5 text-[13px]">
-              ✍️ Generate Draft
+            <button onClick={handleDraftSubmit} className="run-btn flex items-center justify-center gap-2 flex-1 py-2.5 text-[13px]">
+              <FaPen /> Generate Draft
             </button>
             <button
               onClick={() => setShowDraftConf(false)}
@@ -227,8 +228,8 @@ export default function PromptInputBlock({ onProjectCreated }) {
       {/* ── Approve Inline ───────────────────────────────── */}
       {showApprove && (
         <div className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-4 animate-fade-in-up">
-          <div className="font-mono text-[10px] text-[#f59e0b] uppercase tracking-widest mb-3">
-            ✅ Approve Gap Report
+          <div className="flex items-center gap-2 font-mono text-[10px] text-[#f59e0b] uppercase tracking-widest mb-3">
+            <FaCheckCircle /> Approve Gap Report
           </div>
           <textarea
             id="approve-notes"
@@ -278,20 +279,20 @@ function renderStageButtons(status, project, actions, loading, currentProject) {
   const buttons = []
 
   if (!['analyzing','approved','drafting','refining','humanizing','reviewing','complete'].some(s => s === status)) {
-    buttons.push(btn('btn-discover', '🔍', 'Start Discovery', actions.discover))
+    buttons.push(btn('btn-discover', <FaSearch />, 'Start Discovery', actions.discover))
   }
   if (['idle'].includes(status) && currentProject?.status !== 'complete') {
-    buttons.push(btn('btn-analyze', '📄', 'Analyse Papers', actions.analyze))
+    buttons.push(btn('btn-analyze', <FaFileAlt />, 'Analyse Papers', actions.analyze))
   }
   if (status === 'idle' || status === 'approved') {
-    buttons.push(btn('btn-approve', '✅', 'Review & Approve Gaps', actions.approve,
+    buttons.push(btn('btn-approve', <FaCheckCircle />, 'Review & Approve Gaps', actions.approve,
       'text-[#fbbf24] hover:text-[#fef3c7] hover:border-[#f59e0b] hover:bg-[#f59e0b]/10 border-[#1a3a6e]'))
-    buttons.push(btn('btn-draft', '✍️', 'Configure & Draft', actions.draft))
+    buttons.push(btn('btn-draft', <FaPen />, 'Configure & Draft', actions.draft))
   }
   if (['idle'].includes(status)) {
-    buttons.push(btn('btn-refine', '✨', 'Refine Draft', actions.refine))
-    buttons.push(btn('btn-humanize', '🧬', 'Humanize', actions.humanize))
-    buttons.push(btn('btn-review', '👁', 'Peer Review', actions.review))
+    buttons.push(btn('btn-refine', <FaStar />, 'Refine Draft', actions.refine))
+    buttons.push(btn('btn-humanize', <FaDna />, 'Humanize', actions.humanize))
+    buttons.push(btn('btn-review', <FaEye />, 'Peer Review', actions.review))
   }
 
   return buttons

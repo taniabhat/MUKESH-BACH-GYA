@@ -1,18 +1,20 @@
 import React from 'react'
 import { useApp } from '../../context/AppContext'
+import { FaSearch, FaFileAlt, FaMicroscope, FaCheckCircle, FaPen, FaStar, FaDna, FaEye, FaCog, FaFileExport } from 'react-icons/fa'
 
 const STAGES = [
-  { key: 'discovery',    label: 'Discovery',   icon: '🔍' },
-  { key: 'analysis',     label: 'Analysis',    icon: '📄' },
-  { key: 'gap_analysis', label: 'Gap Analysis', icon: '🔬' },
-  { key: 'approval',     label: 'Approval',    icon: '✅' },
-  { key: 'draft',        label: 'Draft',       icon: '✍️' },
-  { key: 'refinement',   label: 'Refinement',  icon: '✨' },
-  { key: 'humanization', label: 'Humanize',    icon: '🧬' },
-  { key: 'review',       label: 'Review',      icon: '👁' },
-  { key: 'generation',   label: 'Generate',    icon: '⚙️' },
-  { key: 'export',       label: 'Export',      icon: '📤' },
+  { key: 'discovery',    label: 'Discovery',   icon: <FaSearch /> },
+  { key: 'analysis',     label: 'Analysis',    icon: <FaFileAlt /> },
+  { key: 'gap_analysis', label: 'Gap Analysis', icon: <FaMicroscope /> },
+  { key: 'approval',     label: 'Approval',    icon: <FaCheckCircle /> },
+  { key: 'draft',        label: 'Draft',       icon: <FaPen /> },
+  { key: 'refinement',   label: 'Refinement',  icon: <FaStar /> },
+  { key: 'humanization', label: 'Humanize',    icon: <FaDna /> },
+  { key: 'review',       label: 'Review',      icon: <FaEye /> },
+  { key: 'generation',   label: 'Generate',    icon: <FaCog /> },
+  { key: 'export',       label: 'Export',      icon: <FaFileExport /> },
 ]
+
 
 const STATUS_TO_STAGE = {
   idle: null, discovering: 'discovery', analyzing: 'analysis',
